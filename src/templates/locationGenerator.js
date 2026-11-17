@@ -1,7 +1,7 @@
 import { COLORS } from '../engine/constants.js';
 import { makeTextLayer, makePinLayer, makeImageLayer, makePillLayer } from '../engine/layerFactory.js';
-import { getWidthVariant, titleFamily, currentFontSet, getInitialFont, titleUppercase } from '../engine/fontSets.js';
-import { layoutMixedTitle, capRatio } from '../engine/mixedTitle.js';
+import { getWidthVariant, titleFamily, FONT_SET, titleUppercase } from '../engine/fontSets.js';
+import { parseBoldSegments, stripBold, bodyWeights } from '../engine/richText.js';
 
 // Proporciones medidas directamente sobre tus stickers reales
 // (D:\ICONOS DE UBICACIÓN\MURCIA.png, lienzo 4538x1813, contenido 969px de
@@ -15,13 +15,17 @@ const RATIO = {
   pinWidth: 0.6667, // relativo al alto H
 };
 
-// Interletrado (tracking) del rótulo: en la Acumin ExtraCondensed Black
-// Itálica de tus stickers reales las letras van casi pegadas (negativo = más
-// juntas). Cada juego de tipografía trae el suyo (fontSets.js).
-const titleTrackingRatio = () => currentFontSet().titleTracking;
-// Peso con el que se pide el rótulo (negro en Acumin; en OES/AJT la familia
-// solo tiene un corte pesado y CSS elige el más cercano)
+// Interletrado (tracking) del rótulo en Thunder (negativo = más juntas; ver fontSets.js)
+const titleTrackingRatio = () => FONT_SET.titleTracking;
+// Peso con el que se pide el rótulo (la familia solo tiene un corte pesado y
+// CSS elige el más cercano)
 const TITLE_WEIGHT = 800;
+
+// Pastilla de fondo de los stickers de título, fecha y ubicación: margen en
+// proporción a la altura de mayúscula (o del pin) y redondeo de las esquinas
+// por defecto (0 = rectas, 1 = extremos totalmente redondos)
+const PILL_PAD = 0.35;
+export const PILL_ROUNDNESS = 0.35;
 
 let measureCtx = null;
 function getMeasureCtx() {
@@ -125,15 +129,21 @@ function measureInkRatios({ text, family, weight, italic, letterSpacingRatio }) 
 // Ajusta el tamaño de fuente para que la altura real de la tinta sea targetH.
 // Una sola medición (cacheada) en vez de 5 renders por llamada.
 function fitFontSizeToCapHeight(text, targetH, family, weight, letterSpacingRatio = 0, italic = false) {
-  const ink = measureInkRatios({ text, family, weight, italic, letterSpacingRatio });
+  const plain = stripBold(text);
+  const ink = measureInkRatios({ text: plain, family, weight, italic, letterSpacingRatio });
   const fontSize = ink.capHeight > 0 ? targetH / ink.capHeight : targetH;
   const letterSpacing = fontSize * letterSpacingRatio;
   const ctx = getMeasureCtx();
   // Chrome necesita la palabra "italic" explícita en el string para aplicar
   // la inclinación del @font-face (el descriptor font-style:oblique del
   // @font-face no basta por sí solo) — igual que en el motor de render.
-  ctx.font = `${italic ? 'italic ' : ''}${weight} ${fontSize}px "${family}"`;
-  const width = ctx.measureText(text).width + Math.max(0, text.length - 1) * letterSpacing;
+  // Con negrita parcial (**así**) cada trozo se mide con su peso.
+  const { bold } = bodyWeights({ role: 'title', weight });
+  let width = Math.max(0, [...plain].length - 1) * letterSpacing;
+  for (const seg of parseBoldSegments(text)) {
+    ctx.font = `${italic ? 'italic ' : ''}${seg.bold ? bold : weight} ${fontSize}px "${family}"`;
+    width += ctx.measureText(seg.text).width;
+  }
   return { fontSize, width, capHeight: targetH, letterSpacing, inkOffsetY: ink.inkOffsetY * fontSize };
 }
 
@@ -144,89 +154,70 @@ function widthVariantFamily(widthKey, italic) {
 
 /**
  * Sticker de título: una sola línea, lienzo ajustado al contenido, sin caja
- * ni controles de posición — pero con libertad de estilo (ancho/peso/cursiva
- * de Acumin Variable), a diferencia del sticker de ubicación que sí usa
- * siempre la misma tipografía de marca.
+ * ni controles de posición — pero con libertad de estilo (corte y cursiva),
+ * a diferencia del sticker de ubicación que sí usa siempre la misma
+ * tipografía de marca.
  */
-export function computeTextTitleGeometry(textRaw, { H = 500, widthVariant = 'extracondensed', weight = 800, italic = true, initialFont = null } = {}) {
+export function computeTextTitleGeometry(textRaw, { H = 500, widthVariant = 'extracondensed', weight = 800, italic = true, keepCase = false } = {}) {
   const raw = (textRaw || 'TEXTO').trim() || 'TEXTO';
-  const text = titleUppercase(widthVariant) ? raw.toUpperCase() : raw;
+  const text = !keepCase && titleUppercase(widthVariant) ? raw.toUpperCase() : raw;
   const pad = H * 0.35;
   const family = widthVariantFamily(widthVariant, italic);
   const lsRatio = widthVariant === 'extracondensed' ? titleTrackingRatio() : 0;
-  const initial = getInitialFont({ initialFont });
-  if (initial) {
-    // inicial en otra fuente: la altura de mayúscula H la da la fuente
-    // principal y la línea base va a H bajo el margen superior; la inicial
-    // (más grande) sobresale por arriba y por abajo dentro del margen
-    const main = { family, weight, italic };
-    const fontSize = H / capRatio(main);
-    const letterSpacing = fontSize * lsRatio;
-    const layout = layoutMixedTitle({ text, main, initial, fontSize, letterSpacing });
-    const baselineY = Math.max(pad + H, layout.inkAbove + pad * 0.6);
-    const bottom = Math.max(pad, layout.inkBelow + pad * 0.6);
-    return {
-      text,
-      canvasW: Math.round(layout.maxLineWidth + pad * 2),
-      canvasH: Math.round(baselineY + bottom),
-      textX: pad, textY: baselineY - layout.baseline, textW: layout.maxLineWidth + fontSize * 0.15, textH: H * 1.3, fontSize, letterSpacing,
-    };
-  }
   const { fontSize, width: textWidth, letterSpacing, inkOffsetY } = fitFontSizeToCapHeight(text, H, family, weight, lsRatio, italic);
   return {
     text,
     canvasW: Math.round(textWidth + pad * 2),
     canvasH: Math.round(H + pad * 2),
     textX: pad, textY: pad - inkOffsetY, textW: textWidth + fontSize * 0.15, textH: H * 1.3, fontSize, letterSpacing,
+    pillPad: H * PILL_PAD,
   };
 }
 
-export function buildTextTitleDoc(textRaw, { H = 500, color = COLORS.red, widthVariant = 'extracondensed', weight = 800, italic = true, initialFont = null } = {}) {
-  const g = computeTextTitleGeometry(textRaw, { H, widthVariant, weight, italic, initialFont });
+// Pastilla de fondo de un sticker, oculta al empezar («Sin fondo»)
+function hiddenPill(targets, g = {}) {
+  return {
+    ...makePillLayer({ targetId: targets[0], ...(g.pillPad ? { padding: g.pillPad } : {}) }),
+    ...(targets.length > 1 ? { targetIds: targets } : {}),
+    roundness: PILL_ROUNDNESS,
+    visible: false,
+  };
+}
+
+// keepCase: respeta mayúsculas y minúsculas (sticker de fecha)
+export function buildTextTitleDoc(textRaw, { H = 500, color = COLORS.red, widthVariant = 'extracondensed', weight = 800, italic = true, keepCase = false, name = 'Sticker de título' } = {}) {
+  const g = computeTextTitleGeometry(textRaw, { H, widthVariant, weight, italic, keepCase });
+  const text = {
+    ...makeTextLayer({
+      name: 'Texto', role: 'title', italic, locked: true,
+      text: g.text, widthVariant, weight,
+      x: g.textX, y: g.textY, width: g.textW, height: g.textH,
+      color, align: 'left', autoFit: false, fontSize: g.fontSize, letterSpacing: g.letterSpacing,
+    }),
+    keepCase,
+  };
   return {
     canvas: { width: g.canvasW, height: g.canvasH },
-    templateName: `Sticker de título · ${g.text}`,
+    templateName: `${name} · ${g.text}`,
     quickGenerator: 'title',
-    layers: [
-      makeTextLayer({
-        name: 'Texto', role: 'title', italic, locked: true,
-        text: g.text, widthVariant, weight, initialFont,
-        x: g.textX, y: g.textY, width: g.textW, height: g.textH,
-        color, align: 'left', autoFit: false, fontSize: g.fontSize, letterSpacing: g.letterSpacing,
-      }),
-    ],
+    templateVersion: 2,
+    layers: [hiddenPill([text.id], g), text],
   };
+}
+
+// Sticker de fecha: como el de título, pero respeta lo que se escribe
+export function buildDateDoc(textRaw = 'Este sábado:') {
+  return buildTextTitleDoc(textRaw, { keepCase: true, name: 'Sticker de fecha' });
 }
 
 // Caja por defecto del sticker de cuerpo (libre, con ajuste de línea, varios
-// estilos de Acumin Variable y control de posición).
+// cortes de letra y control de posición).
 export function defaultBodyStickerBox() {
   return { canvasW: 1200, canvasH: 500, x: 60, y: 60, width: 1080, height: 380 };
 }
 
-export function buildTextBodyDoc(textRaw = 'Escribe aquí tu texto largo. Puedes usar varias líneas y **negrita parcial**.', { color = COLORS.white, community = false } = {}) {
+export function buildTextBodyDoc(textRaw = 'Escribe aquí tu texto largo. Puedes usar varias líneas y **negrita parcial**.', { color = COLORS.white } = {}) {
   const box = defaultBodyStickerBox();
-  return {
-    canvas: { width: box.canvasW, height: box.canvasH },
-    templateName: 'Sticker de cuerpo',
-    quickGenerator: 'body',
-    community,
-    layers: [
-      makeTextLayer({
-        name: 'Texto', role: 'body', locked: false, autoFit: true,
-        text: textRaw,
-        x: box.x, y: box.y, width: box.width, height: box.height,
-        color, align: 'left', widthVariant: 'normal',
-      }),
-    ],
-  };
-}
-
-// Igual que el sticker de cuerpo, pero con una pastila de color corporativo
-// detrás del texto. Lienzo con más margen para que quepa el relleno de la
-// pastila (hasta 120px) alrededor de la caja de texto.
-export function buildTextBodyPillDoc(textRaw = 'Texto sobre una **pastila de color**.\n\nPuedes separar párrafos con una línea vacía.', { color = COLORS.white, pillColor = COLORS.red } = {}) {
-  const box = { canvasW: 1300, canvasH: 640, x: 130, y: 130, width: 1040, height: 380 };
   const text = makeTextLayer({
     name: 'Texto', role: 'body', locked: false, autoFit: true,
     text: textRaw,
@@ -235,12 +226,10 @@ export function buildTextBodyPillDoc(textRaw = 'Texto sobre una **pastila de col
   });
   return {
     canvas: { width: box.canvasW, height: box.canvasH },
-    templateName: 'Sticker de cuerpo con fondo',
+    templateName: 'Sticker de cuerpo',
     quickGenerator: 'body',
-    layers: [
-      makePillLayer({ targetId: text.id, color: pillColor }),
-      text,
-    ],
+    templateVersion: 2,
+    layers: [hiddenPill([text.id]), text],
   };
 }
 
@@ -264,33 +253,34 @@ export function computeLocationGeometry(cityNameRaw, { H = 600 } = {}) {
     canvasH: Math.round(topMargin + H + bottomMargin),
     pinX: leftMargin, pinY: topMargin, pinW: pinWidth, pinH: H,
     textX: leftMargin + pinWidth + gap, textY: topMargin - inkOffsetY, textW: textWidth + fontSize * 0.15, textH: H * 1.3, fontSize, letterSpacing,
+    pillPad: H * PILL_PAD,
   };
 }
 
 export function pinAssetForColor(color) {
-  if (color === COLORS.white || color === '#ffffff') return 'pin-on-black'; // asset blanco
-  if (color === COLORS.black || color === '#282929') return 'pin-on-white'; // asset negro
+  if (color === COLORS.white) return 'pin-on-black'; // asset blanco
+  if (color === COLORS.black) return 'pin-on-white'; // asset negro
   return 'pin-red'; // rojo corporativo
 }
 
 export function buildLocationStickerDoc(cityNameRaw, { H = 600, color = COLORS.white } = {}) {
   const g = computeLocationGeometry(cityNameRaw, { H });
+  const pin = makePinLayer({
+    name: 'Pin', asset: pinAssetForColor(color), locked: true,
+    x: g.pinX, y: g.pinY, width: g.pinW, height: g.pinH,
+  });
+  const text = makeTextLayer({
+    name: 'Ciudad', role: 'title', italic: true, locked: true,
+    text: g.cityName,
+    x: g.textX, y: g.textY, width: g.textW, height: g.textH,
+    color, align: 'left', autoFit: false, fontSize: g.fontSize, letterSpacing: g.letterSpacing,
+  });
   return {
     canvas: { width: g.canvasW, height: g.canvasH },
     templateName: `Sticker de ubicación · ${g.cityName}`,
     quickGenerator: 'location',
-    layers: [
-      makePinLayer({
-        name: 'Pin', asset: pinAssetForColor(color), locked: true,
-        x: g.pinX, y: g.pinY, width: g.pinW, height: g.pinH,
-      }),
-      makeTextLayer({
-        name: 'Ciudad', role: 'title', italic: true, locked: true,
-        text: g.cityName,
-        x: g.textX, y: g.textY, width: g.textW, height: g.textH,
-        color, align: 'left', autoFit: false, fontSize: g.fontSize, letterSpacing: g.letterSpacing,
-      }),
-    ],
+    templateVersion: 2,
+    layers: [hiddenPill([pin.id, text.id], g), pin, text],
   };
 }
 
@@ -298,7 +288,7 @@ export function buildLocationStickerDoc(cityNameRaw, { H = 600, color = COLORS.w
  * Foto con ubicación: una foto (se sube aparte) + el mismo sticker de
  * ubicación anclado a una de las 4 esquinas, con tamaño ajustable.
  */
-export function computePhotoBadgeGeometry(cityNameRaw, { corner = 'bottom-left', canvasW = 1080, canvasH = 1350, scale = 1 } = {}) {
+export function computePhotoBadgeGeometry(cityNameRaw, { corner = 'bottom-left', canvasW = 1080, canvasH = 1350, scale = 1, pill = false } = {}) {
   const cityName = (cityNameRaw || 'CIUDAD').toUpperCase().trim() || 'CIUDAD';
   // La foto puede tener cualquier proporción (vertical, horizontal,
   // cuadrada): el tamaño y el margen del sticker se basan en su lado CORTO
@@ -308,7 +298,9 @@ export function computePhotoBadgeGeometry(cityNameRaw, { corner = 'bottom-left',
   const margin = base * 0.05;
   let H = base * 0.07 * scale;
   let fit = fitFontSizeToCapHeight(cityName, H, titleFamily(), TITLE_WEIGHT, titleTrackingRatio(), true);
-  const widthFor = (h, textW) => RATIO.pinWidth * h + RATIO.gap * h + textW;
+  // con pastilla, el sticker se aparta además del borde lo que ocupa su margen
+  const pillPadFor = (h) => (pill ? h * PILL_PAD : 0);
+  const widthFor = (h, textW) => RATIO.pinWidth * h + RATIO.gap * h + textW + pillPadFor(h) * 2;
   const maxBadgeW = canvasW - margin * 2;
   if (widthFor(H, fit.width) > maxBadgeW) {
     // el ancho del sticker escala linealmente con H
@@ -321,11 +313,13 @@ export function computePhotoBadgeGeometry(cityNameRaw, { corner = 'bottom-left',
   const badgeW = pinWidth + gap + textWidth;
   const isRight = corner.endsWith('right');
   const isBottom = corner.startsWith('bottom');
-  const badgeX = isRight ? canvasW - margin - badgeW : margin;
-  const badgeY = isBottom ? canvasH - margin - H : margin;
+  const edge = margin + pillPadFor(H);
+  const badgeX = isRight ? canvasW - edge - badgeW : edge;
+  const badgeY = isBottom ? canvasH - edge - H : edge;
   return {
     cityName, pinX: badgeX, pinY: badgeY, pinW: pinWidth, pinH: H,
     textX: badgeX + pinWidth + gap, textY: badgeY - inkOffsetY, textW: textWidth + fontSize * 0.15, textH: H * 1.3, fontSize, letterSpacing,
+    pillPad: H * PILL_PAD,
   };
 }
 
@@ -334,25 +328,29 @@ export function buildPhotoLocationDoc(cityNameRaw, {
   canvasW = 1080, canvasH = 1350, scale = 1,
 } = {}) {
   const g = computePhotoBadgeGeometry(cityNameRaw, { corner, canvasW, canvasH, scale });
+  const pin = makePinLayer({
+    name: 'Pin', asset: pinAssetForColor(color), locked: true,
+    x: g.pinX, y: g.pinY, width: g.pinW, height: g.pinH,
+  });
+  const text = makeTextLayer({
+    name: 'Ciudad', role: 'title', italic: true, locked: true,
+    text: g.cityName,
+    x: g.textX, y: g.textY, width: g.textW, height: g.textH,
+    color, align: 'left', autoFit: false, fontSize: g.fontSize, letterSpacing: g.letterSpacing,
+  });
   return {
     canvas: { width: canvasW, height: canvasH },
     templateName: `Foto con ubicación · ${g.cityName}`,
     quickGenerator: 'photoLocation',
+    templateVersion: 2,
     layers: [
       makeImageLayer({
         name: 'Foto', src: photoSrc, fit: 'cover', locked: true, cornerRadius: 0,
         x: 0, y: 0, width: canvasW, height: canvasH,
       }),
-      makePinLayer({
-        name: 'Pin', asset: pinAssetForColor(color), locked: true,
-        x: g.pinX, y: g.pinY, width: g.pinW, height: g.pinH,
-      }),
-      makeTextLayer({
-        name: 'Ciudad', role: 'title', italic: true, locked: true,
-        text: g.cityName,
-        x: g.textX, y: g.textY, width: g.textW, height: g.textH,
-        color, align: 'left', autoFit: false, fontSize: g.fontSize, letterSpacing: g.letterSpacing,
-      }),
+      hiddenPill([pin.id, text.id], g),
+      pin,
+      text,
     ],
   };
 }

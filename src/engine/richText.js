@@ -1,6 +1,6 @@
-// Texto enriquecido muy ligero para el cuerpo: solo soporta negrita parcial
-// marcando fragmentos con **así** (estilo Markdown), para poder resaltar
-// palabras sueltas sin tener que crear una capa de texto nueva.
+// Texto enriquecido muy ligero (cuerpo, y títulos con marcas): solo soporta
+// negrita parcial marcando fragmentos con **así** (estilo Markdown), para
+// poder resaltar palabras sueltas sin tener que crear una capa de texto nueva.
 //
 // Konva.Text no soporta estilos mixtos dentro de un mismo nodo, así que
 // troceamos el texto en "runs" (segmentos con el mismo estilo) y calculamos
@@ -28,16 +28,21 @@ export function parseBoldSegments(text) {
   return segments;
 }
 
-// Peso base del cuerpo (el que se elige con los botones de peso) y peso de
-// la negrita parcial (**así**), siempre visiblemente más grueso que la base.
+// Peso base (el que se elige con los botones de peso; 800 por defecto en los
+// títulos) y peso de la negrita parcial (**así**), siempre más grueso que la base.
 export function bodyWeights(d) {
-  const normal = d.weight || (d.bold ? 700 : 400);
+  const normal = d.weight || (d.role === 'title' ? 800 : (d.bold ? 700 : 400));
   const bold = Math.min(900, Math.max(700, normal + 300));
   return { normal, bold };
 }
 
 export function hasBoldMarkers(text) {
   return /\*\*(.+?)\*\*/.test(text || '');
+}
+
+// El texto sin las marcas de negrita
+export function stripBold(text) {
+  return (text || '').replace(/\*\*(.+?)\*\*/g, '$1');
 }
 
 // Trocea los segmentos en "palabras", espacios y saltos de línea ("\n" va
@@ -61,7 +66,7 @@ function fontString(weight, size, family, italic = false) {
  */
 export function layoutRichText({
   text, box, fontFamily, fontFamilyItalic, italic, normalWeight = 400, boldWeight = 700,
-  fontSize, lineHeight = 1.08, align = 'left',
+  fontSize, lineHeight = 1.08, align = 'left', letterSpacing = 0,
 }) {
   const ctx = getCtx();
   const family = italic ? fontFamilyItalic : fontFamily;
@@ -78,9 +83,10 @@ export function layoutRichText({
     lines.push({ words: current, width: lineWidth(current), endsParagraph });
     current = [];
   };
+  // Konva añade el espaciado entre letras detrás de cada carácter
   const measure = (text, bold) => {
     ctx.font = fontString(bold ? boldWeight : normalWeight, fontSize, family, italic);
-    return ctx.measureText(text).width;
+    return ctx.measureText(text).width + letterSpacing * [...text].length;
   };
 
   // Una palabra más ancha que la caja (p.ej. escribir sin espacios) se parte
@@ -154,17 +160,17 @@ export function layoutRichText({
  */
 export function fitRichText({
   text, box, fontFamily, fontFamilyItalic, italic, normalWeight = 400, boldWeight = 700,
-  minSize = 10, maxSize = 90, lineHeight = 1.08, align = 'left',
+  minSize = 10, maxSize = 90, lineHeight = 1.08, align = 'left', letterSpacing = 0,
 }) {
   let best = null;
   for (let size = maxSize; size >= minSize; size -= 1) {
     const layout = layoutRichText({
-      text, box, fontFamily, fontFamilyItalic, italic, normalWeight, boldWeight, fontSize: size, lineHeight, align,
+      text, box, fontFamily, fontFamilyItalic, italic, normalWeight, boldWeight, fontSize: size, lineHeight, align, letterSpacing,
     });
     if (layout.usedHeight <= box.height) { best = { ...layout, fontSize: size }; break; }
   }
   if (!best) {
-    best = { ...layoutRichText({ text, box, fontFamily, fontFamilyItalic, italic, normalWeight, boldWeight, fontSize: minSize, lineHeight, align }), fontSize: minSize };
+    best = { ...layoutRichText({ text, box, fontFamily, fontFamilyItalic, italic, normalWeight, boldWeight, fontSize: minSize, lineHeight, align, letterSpacing }), fontSize: minSize };
   }
   return best;
 }

@@ -1,11 +1,11 @@
 import { getState, updateLayer, selectLayer, pushHistory } from './state.js';
-import { CANVAS_W, CANVAS_H, FONT_FAMILY, FONT_FAMILY_ITALIC, FONT_FAMILY_TITLE, FONT_FAMILY_TITLE_ITALIC } from './constants.js';
-import { getWidthVariant, currentFontSet, getInitialFont } from './fontSets.js';
-import { layoutMixedTitle, fitMixedTitle, drawMixedTitle } from './mixedTitle.js';
+import { CANVAS_W, CANVAS_H, COLORS } from './constants.js';
+import { getWidthVariant, snapWeight } from './fontSets.js';
 import { fitTextToBox } from './textFit.js';
-import { layoutRichText, fitRichText, bodyWeights } from './richText.js';
+import { layoutRichText, fitRichText, bodyWeights, hasBoldMarkers } from './richText.js';
 import { ensureFontsFor } from './fonts.js';
 import { tintCanvas } from '../lib/recolor.js';
+import { villalbaSrc, villalbaVariant } from '../templates/villalbaLogo.js';
 
 const imageCache = new Map();
 function loadImage(src) {
@@ -22,6 +22,15 @@ function loadImage(src) {
   return p;
 }
 
+// Los logos y stickers grandes (miles de píxeles) se dibujan muy reducidos.
+// Con la calidad de reducción por defecto el navegador se salta píxeles y los
+// bordes salen en dientes de sierra; aquí se pide la de calidad alta en cada
+// dibujo (pantalla y exportación).
+function drawSmoothImage(ctx, shape) {
+  ctx._context.imageSmoothingQuality = 'high';
+  shape._sceneFunc(ctx);
+}
+
 const tintCache = new Map();
 function tintedPin(src, color, duotone = false) {
   const key = `${src}|${color}|${duotone}`;
@@ -33,12 +42,9 @@ function tintedPin(src, color, duotone = false) {
 }
 
 const LOGO_ASSETS = {
-  // 'full' se mantiene como alias de 'icon-on-black' por compatibilidad con
-  // plantillas/documentos guardados antes de tener variantes por fondo.
-  full: './assets/logo/logo-full.png',
-  'icon-on-white': './assets/logo/logo-on-white.png',
-  'icon-on-black': './assets/logo/logo-on-black.png',
-  'icon-on-red': './assets/logo/logo-on-red.png',
+  'icon-on-white': './assets/logo/icon-on-white.png',
+  'icon-on-black': './assets/logo/icon-on-black.png',
+  'icon-on-red': './assets/logo/icon-on-red.png',
   'wordmark-on-white': './assets/logo/wordmark-on-white.png',
   'wordmark-on-black': './assets/logo/wordmark-on-black.png',
   'wordmark-on-red': './assets/logo/wordmark-on-red.png',
@@ -50,7 +56,7 @@ export const LOGO_KINDS = [
   {
     key: 'icon',
     label: 'Solo icono',
-    aspect: 1, // logo-full.png es ~468x467
+    aspect: 1, // icon-on-*.png son cuadrados
     variants: [
       { key: 'icon-on-white', label: 'Sobre blanco', src: LOGO_ASSETS['icon-on-white'] },
       { key: 'icon-on-black', label: 'Sobre negro', src: LOGO_ASSETS['icon-on-black'] },
@@ -60,7 +66,7 @@ export const LOGO_KINDS = [
   {
     key: 'wordmark',
     label: 'Con texto',
-    aspect: 508 / 1696, // alto/ancho del PNG real exportado desde Photoshop
+    aspect: 1310 / 4374, // alto/ancho de wordmark-on-*.png
     variants: [
       { key: 'wordmark-on-white', label: 'Sobre blanco', src: LOGO_ASSETS['wordmark-on-white'] },
       { key: 'wordmark-on-black', label: 'Sobre negro', src: LOGO_ASSETS['wordmark-on-black'] },
@@ -69,10 +75,11 @@ export const LOGO_KINDS = [
   },
 ];
 
-// Logo de la marca activa para cada variante de fondo (assets/logo/brand/<marca>/...)
+// Logo de AJT para cada variante de fondo. 'full' es el nombre antiguo de
+// 'icon-on-black' (plantillas/documentos guardados antes de tener variantes).
 export function logoSrcFor(assetKey) {
   const key = assetKey === 'full' ? 'icon-on-black' : assetKey;
-  return `./assets/logo/brand/${currentFontSet().key}/${key}.png`;
+  return LOGO_ASSETS[key] || LOGO_ASSETS['icon-on-black'];
 }
 
 export function logoKindOf(assetKey) {
@@ -110,8 +117,8 @@ export class StageRenderer {
     this.stage.add(this.layer);
     this.transformer = new window.Konva.Transformer({
       rotateAnchorOffset: 24,
-      borderStroke: '#f54949',
-      anchorStroke: '#f54949',
+      borderStroke: COLORS.red,
+      anchorStroke: COLORS.red,
       anchorFill: '#ffffff',
       anchorSize: 10,
       ignoreStroke: true,
@@ -208,7 +215,7 @@ export class StageRenderer {
       // (título = Text simple, cuerpo = Group de "runs" por la negrita
       // parcial); si el rol cambió desde la última vez, hay que reconstruir
       // el nodo en vez de actualizar uno del tipo equivocado.
-      const expectedKind = layerData.type === 'text' ? `text-${layerData.role}${this.isMixedTitle(layerData) ? '-mixed' : ''}` : layerData.type;
+      const expectedKind = layerData.type === 'text' ? `text-${this.isRunsText(layerData) ? 'runs' : 'plain'}` : layerData.type;
       if (node && node.getAttr('_kind') !== expectedKind) {
         node.destroy();
         this.nodes.delete(layerData.id);
@@ -279,13 +286,15 @@ export class StageRenderer {
   // midiendo píxeles: la caja de Konva reserva hueco para descendentes
   // (g, p, q) y el margen de la pastila quedaba más grande abajo que arriba.
   // Se cachea por contenido, así que arrastrar no vuelve a medir.
-  inkBounds(group) {
-    const runs = group.getChildren().filter((t) => t.text && t.text().trim());
+  // Caja de la tinta real de un texto (un Konva.Text o un grupo de "runs"),
+  // relativa a su origen: se rasteriza a media resolución y se cachea
+  inkBounds(node) {
+    const runs = (node.getChildren ? node.getChildren() : [node]).filter((t) => t.text && t.text().trim());
     if (!runs.length) return null;
-    const key = runs.map((t) => `${t.text()}|${t.x()}|${t.y()}|${t.fontSize()}|${t.fontFamily()}|${t.fontStyle()}`).join('¦');
-    if (group.getAttr('_inkKey') === key) return group.getAttr('_ink');
+    const key = runs.map((t) => `${t.text()}|${t.x()}|${t.y()}|${t.width()}|${t.fontSize()}|${t.fontFamily()}|${t.fontStyle()}|${t.letterSpacing()}`).join('¦');
+    if (node.getAttr('_inkKey') === key) return node.getAttr('_ink');
     const ratio = 0.5;
-    const clone = group.clone({ x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 });
+    const clone = node.clone({ x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 });
     const box = clone.getClientRect();
     const canvas = clone.toCanvas({ pixelRatio: ratio });
     clone.destroy();
@@ -306,38 +315,45 @@ export class StageRenderer {
       minX: box.x + minX / ratio, minY: box.y + minY / ratio,
       maxX: box.x + (maxX + 1) / ratio, maxY: box.y + (maxY + 1) / ratio,
     };
-    group.setAttr('_inkKey', key);
-    group.setAttr('_ink', ink);
+    node.setAttr('_inkKey', key);
+    node.setAttr('_ink', ink);
     return ink;
   }
 
-  // Ajusta cada pastila al texto REAL de su capa (no a la caja): ancho de la
-  // línea más larga y alto de todas las líneas, más el margen interior.
-  // Sigue también la posición/rotación del texto (y se llama en vivo
-  // mientras se arrastra o transforma).
+  // Pastilla de fondo: rectángulo redondeado que envuelve sus capas objetivo
+  // (un texto, o pin + texto en la ubicación) más su margen. Los textos
+  // cuentan por su tinta real; las imágenes (el pin), por su caja. Los
+  // stickers con pastilla no giran.
   syncPills() {
     const state = getState();
     for (const d of state.layers) {
       if (d.type !== 'pill') continue;
       const rect = this.nodes.get(d.id);
-      const target = this.nodes.get(d.targetId);
       if (!rect) continue;
-      const ink = target && target.getChildren ? this.inkBounds(target) : null;
-      if (!ink) { rect.visible(false); continue; }
-      const { minX, minY, maxX, maxY } = ink;
+      const targets = (d.targetIds || [d.targetId]).map((id) => this.nodes.get(id)).filter(Boolean);
+      let box = null;
+      for (const t of targets) {
+        const isText = t.getChildren || t.getClassName() === 'Text';
+        const ink = isText ? this.inkBounds(t) : { minX: 0, minY: 0, maxX: t.width(), maxY: t.height() };
+        if (!ink) continue;
+        const b = { minX: t.x() + ink.minX, minY: t.y() + ink.minY, maxX: t.x() + ink.maxX, maxY: t.y() + ink.maxY };
+        box = box ? {
+          minX: Math.min(box.minX, b.minX), minY: Math.min(box.minY, b.minY),
+          maxX: Math.max(box.maxX, b.maxX), maxY: Math.max(box.maxY, b.maxY),
+        } : b;
+      }
+      if (!box) { rect.visible(false); continue; }
       const pad = d.padding || 0;
-      const w = maxX - minX + pad * 2;
-      const h = maxY - minY + pad * 2;
+      const w = box.maxX - box.minX + pad * 2;
+      const h = box.maxY - box.minY + pad * 2;
       rect.setAttrs({
-        x: target.x(), y: target.y(),
-        rotation: target.rotation(),
-        scaleX: target.scaleX(), scaleY: target.scaleY(),
-        offsetX: -(minX - pad), offsetY: -(minY - pad),
+        x: box.minX - pad, y: box.minY - pad,
+        rotation: 0, scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0,
         width: w, height: h,
-        // radio máximo = media altura (extremos totalmente redondos)
-        cornerRadius: Math.min(d.cornerRadius || 0, h / 2, w / 2),
-        fill: d.color || '#f54949',
-        visible: d.visible !== false && target.visible(),
+        // roundness: 0 = esquinas rectas, 1 = extremos totalmente redondos
+        cornerRadius: d.roundness != null ? (d.roundness * Math.min(w, h)) / 2 : Math.min(d.cornerRadius || 0, h / 2, w / 2),
+        fill: d.color || COLORS.red,
+        visible: d.visible !== false && targets.every((t) => t.visible()),
       });
     }
   }
@@ -474,9 +490,11 @@ export class StageRenderer {
       name: 'placeholder',
       visible: !img,
     });
+    // texto del hueco vacío: propio de la capa si lo trae (p. ej. «+ foto de
+    // fondo», abajo para no pisar el hueco del titular que va encima)
     const label = new window.Konva.Text({
-      text: '+ imagen', fontSize: 24, fill: '#888',
-      width: d.width, height: d.height, align: 'center', verticalAlign: 'middle',
+      text: d.placeholderText || '+ imagen', fontSize: 24, fill: '#888',
+      width: d.width, height: d.height, align: 'center', verticalAlign: d.placeholderAlign || 'middle', padding: d.placeholderAlign ? 48 : 0,
       name: 'placeholderLabel', visible: !img,
     });
     const image = new window.Konva.Image({
@@ -484,6 +502,7 @@ export class StageRenderer {
       width: d.width, height: d.height,
       cornerRadius: d.cornerRadius || 0,
       name: 'img', visible: !!img,
+      sceneFunc: drawSmoothImage,
     });
     group.add(placeholder, label, image);
     group.setAttr('_src', this.imageKey(d));
@@ -545,11 +564,13 @@ export class StageRenderer {
   async loadLogoImage(d) {
     const assets = this.assetMapFor(d);
     if (d.type === 'pin' && d.tint) return tintedPin(PIN_ASSETS['pin-on-black'], d.tint);
+    if (d.villalba) return loadImage(villalbaSrc(villalbaVariant(d, getState().layers), d.villalbaLayout));
     if (d.type === 'logo') return loadImage(logoSrcFor(d.asset));
     return loadImage(assets[d.asset] || assets.full);
   }
   logoImageKey(d) {
-    if (d.type === 'logo') return `${currentFontSet().key}:${d.asset}`;
+    // el de Villalba cambia de PNG al cambiar el color del fondo
+    if (d.villalba) return `villalba:${d.villalbaLayout}:${villalbaVariant(d, getState().layers)}`;
     return d.type === 'pin' && d.tint ? `tint:${d.tint}` : d.asset;
   }
   async createLogoNode(d) {
@@ -558,6 +579,7 @@ export class StageRenderer {
       image: img || undefined,
       x: d.x, y: d.y, width: d.width, height: d.height,
       rotation: d.rotation || 0,
+      sceneFunc: drawSmoothImage,
     });
     node.setAttr('_asset', this.logoImageKey(d));
     return node;
@@ -589,11 +611,10 @@ export class StageRenderer {
     if (!d.autoFit) {
       const size = d.fontSize || 48;
       if (d.fixedSize) return size; // stickers de «Imagen + stickers»: tamaño exacto
-      // Los tamaños fijos de las plantillas están pensados para Acumin (muy
-      // estrecha). Con OES/AJT el mismo tamaño puede no caber en la caja y el
-      // texto se recortaba: ahí se reduce lo justo para que quepa. En CJS (y
-      // en los stickers, cuya caja ya se calcula a medida) no cambia nada.
-      if (!currentFontSet().styles || d.locked) return size;
+      // Con el tamaño fijo de la plantilla el texto puede no caber en la caja
+      // (se recortaba): se reduce lo justo para que quepa. Los stickers, cuya
+      // caja ya se calcula a medida, no cambian.
+      if (d.locked) return size;
       // el título conserva las líneas que la plantilla le reserva a su tamaño
       // de diseño (una, normalmente) en vez de partirse en dos y pisar el cuerpo
       const maxLines = Math.max(1, Math.floor(d.height / (size * 1.08)));
@@ -604,14 +625,8 @@ export class StageRenderer {
   // Mayor tamaño (hasta maxSize) con el que el texto cabe en la caja de la capa
   fitSize(d, maxSize, maxLines = Infinity) {
     const { weight, family } = this.computeFont(d);
-    if (this.isMixedTitle(d)) {
-      return fitMixedTitle({
-        text: d.text || '', main: { family, weight, italic: !!d.italic }, initial: getInitialFont(d),
-        boxWidth: d.width, boxHeight: d.height, maxSize, maxLines, letterSpacing: d.letterSpacing || 0, align: d.align || 'left',
-      });
-    }
-    if (d.role !== 'title') {
-      const variant = getWidthVariant(d.widthVariant || 'normal');
+    if (this.isRunsText(d)) {
+      const variant = this.runsVariant(d);
       return fitRichText({
         text: d.text || '',
         box: { width: d.width, height: d.height },
@@ -621,6 +636,7 @@ export class StageRenderer {
         normalWeight: bodyWeights(d).normal,
         boldWeight: bodyWeights(d).bold,
         align: d.align || 'left',
+        letterSpacing: d.letterSpacing || 0,
         minSize: 12,
         maxSize,
       }).fontSize;
@@ -677,10 +693,20 @@ export class StageRenderer {
   }
 
   // el cuerpo se renderiza siempre como un grupo de "runs" (permite negrita parcial con **así**)
+  // El cuerpo se dibuja siempre por "runs" (negrita parcial con **así**); el
+  // título, solo cuando lleva esas marcas (si no, un Konva.Text simple)
+  isRunsText(d) {
+    return d.role !== 'title' || hasBoldMarkers(d.text);
+  }
+  runsVariant(d) {
+    return getWidthVariant(d.widthVariant || (d.role === 'title' ? 'extracondensed' : 'normal'));
+  }
   buildBodyRuns(group, d) {
     const fontSize = this.resolveFontSize(d);
     const { normal: normalWeight, bold: boldWeight } = bodyWeights(d);
-    const variant = getWidthVariant(d.widthVariant || 'normal');
+    const variant = this.runsVariant(d);
+    const isTitle = d.role === 'title';
+    const letterSpacing = d.letterSpacing || 0;
     const layout = layoutRichText({
       text: d.text || '',
       box: { width: d.width, height: d.height },
@@ -691,7 +717,12 @@ export class StageRenderer {
       boldWeight,
       fontSize,
       align: d.align || 'left',
+      letterSpacing,
     });
+    // familias sin un corte más grueso (Thunder, Black Condensed, PP
+    // Playground, o ya en Bold): la negrita se simula con un trazo del mismo color
+    const fauxBold = snapWeight(variant.family, boldWeight) <= snapWeight(variant.family, normalWeight);
+    const fill = d.color || '#ffffff';
     group.destroyChildren();
     layout.runs.forEach((run) => {
       if (!run.text.trim() && !/\s/.test(run.text)) return;
@@ -701,7 +732,10 @@ export class StageRenderer {
         fontSize,
         fontFamily: run.family,
         fontStyle: `${d.italic ? 'italic ' : ''}${run.bold ? boldWeight : normalWeight}`,
-        fill: d.color || '#ffffff',
+        fill,
+        // mismo alto de línea que el título simple, para que no se mueva al poner marcas
+        ...(isTitle ? { lineHeight: 1.08, letterSpacing } : {}),
+        ...(run.bold && fauxBold ? { stroke: fill, strokeWidth: fontSize * 0.018, lineJoin: 'round' } : {}),
       }));
     });
   }
@@ -719,45 +753,12 @@ export class StageRenderer {
     this.buildBodyRuns(group, d);
   }
 
-  // título destacado con la inicial en otra fuente (OES): se dibuja a mano
-  isMixedTitle(d) {
-    return d.type === 'text' && d.role === 'title' && !!getInitialFont(d);
-  }
-  createMixedTitleNode(d) {
-    const group = new window.Konva.Group({ x: d.x, y: d.y, width: d.width, height: d.height, rotation: d.rotation || 0 });
-    group.add(new window.Konva.Shape({
-      name: 'mixedTitle', width: d.width, height: d.height,
-      sceneFunc: (ctx, shape) => {
-        const layout = shape.getAttr('_layout');
-        if (layout) drawMixedTitle(ctx._context, layout, shape.getAttr('_color'));
-      },
-      hitFunc: (ctx, shape) => { ctx.beginPath(); ctx.rect(0, 0, shape.width(), shape.height()); ctx.closePath(); ctx.fillStrokeShape(shape); },
-    }));
-    this.updateMixedTitleNode(group, d);
-    return group;
-  }
-  updateMixedTitleNode(group, d) {
-    group.position({ x: d.x, y: d.y });
-    group.size({ width: d.width, height: d.height });
-    group.rotation(d.rotation || 0);
-    const shape = group.findOne('.mixedTitle');
-    shape.size({ width: d.width, height: d.height });
-    const { weight, family } = this.computeFont(d);
-    const layout = layoutMixedTitle({
-      text: d.text || '', main: { family, weight, italic: !!d.italic }, initial: getInitialFont(d),
-      fontSize: this.resolveFontSize(d), letterSpacing: d.letterSpacing || 0, boxWidth: d.width, align: d.align || 'left',
-    });
-    shape.setAttrs({ _layout: layout, _color: d.color || '#ffffff' });
-  }
-
   createTextNode(d) {
-    if (this.isMixedTitle(d)) return this.createMixedTitleNode(d);
-    return d.role === 'title' ? this.createTitleTextNode(d) : this.createBodyTextNode(d);
+    return this.isRunsText(d) ? this.createBodyTextNode(d) : this.createTitleTextNode(d);
   }
   updateTextNode(node, d) {
-    if (this.isMixedTitle(d)) this.updateMixedTitleNode(node, d);
-    else if (d.role === 'title') this.updateTitleTextNode(node, d);
-    else this.updateBodyTextNode(node, d);
+    if (this.isRunsText(d)) this.updateBodyTextNode(node, d);
+    else this.updateTitleTextNode(node, d);
   }
 
   // ---- FRAME (marco guía de "compartido") ----
@@ -768,7 +769,7 @@ export class StageRenderer {
     const rect = new window.Konva.Rect({
       width: d.width, height: d.height,
       cornerRadius: d.cornerRadius || 0,
-      fill: '#f54949',
+      fill: COLORS.red,
       name: 'rect',
     });
     const labelBg = new window.Konva.Rect({
@@ -779,7 +780,7 @@ export class StageRenderer {
     const label = new window.Konva.Text({
       text: `compartido ${d.ratioKey}`,
       fontSize: 20,
-      fontFamily: FONT_FAMILY,
+      fontFamily: getWidthVariant('normal').family,
       fill: '#ffffff',
       x: 18, y: 17,
       name: 'label',
@@ -836,7 +837,7 @@ export class StageRenderer {
     this.applyGradientFill(node, d);
   }
   applyGradientFill(node, d) {
-    const c = d.color || '#282929';
+    const c = d.color || COLORS.black;
     node.fillLinearGradientStartPoint({ x: 0, y: 0 });
     node.fillLinearGradientEndPoint({ x: 0, y: d.height });
     node.fillLinearGradientColorStops([0, hexToRgba(c, 0), 1, hexToRgba(c, 0.92)]);

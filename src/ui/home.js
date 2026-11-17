@@ -1,51 +1,56 @@
-import { FONT_SETS, titleFamily } from '../engine/fontSets.js';
-import { logoSrcFor } from '../engine/stageRenderer.js';
+import { titleFamily } from '../engine/fontSets.js';
+import { villalbaSrc } from '../templates/villalbaLogo.js';
 import { ensureFonts } from '../engine/fonts.js';
 import { isMuted, setMuted } from '../lib/sound.js';
 import { icon } from './icons.js';
-import { renderCommunitySection } from './communityPanel.js';
 
 // Menú de inicio, de arriba abajo:
-//   1. Marca (CJS · OES · AJT)
-//   2. Plantillas · Textos · Stickers
-//   3. Stickers → Recursos de marca · Temáticos
-//   4. Recursos de marca → logo y stickers de la marca; Temáticos → Huelga, etc.
+//   1. Plantillas · Textos · Stickers
+//   2. Plantillas → Reposts · Artículos · Imágenes; Stickers → Ubicación · Fechas · Logo AJT · Temáticos
+//   3. Temáticos → Huelga, etc.
 // Cada nivel es una lista con «‹ Volver»; la última fila abre la plantilla.
 
-const LOGO_BY_BRAND = { cjs: 'logo_cjs', oes: 'logo_oes', ajt: 'logo_ajt' };
-
 // Cada nodo: { title, hint, icon, id } abre una plantilla; { title, hint, icon, children } abre otro nivel.
-// children puede ser una función de la marca activa.
 const MENU = [
   {
     title: 'Plantillas', hint: 'Stories y fotos ya montadas', icon: 'story',
     children: [
-      { title: 'Story con texto', hint: 'Título y cuerpo debajo', icon: 'story', id: 'builtin_repost_simple' },
-      { title: 'Story con publicación', hint: 'Título, publicación y cuerpo', icon: 'storyShared', id: 'builtin_repost_shared' },
-      { title: 'Artículo', hint: 'Plantilla fija de artículo', icon: 'article', id: 'builtin_article' },
-      { title: 'Imagen + stickers', hint: 'Tu imagen con stickers y textos que mueves a mano', icon: 'compose', id: 'compose_photo' },
-      { title: 'Foto con ubicación', hint: 'Tu foto con la ubicación', icon: 'photo', id: 'photo_location' },
+      {
+        title: 'Reposts', hint: 'Para compartir una publicación', icon: 'storyShared',
+        children: [
+          { title: 'Post arriba - Texto abajo', hint: 'Publicación, título y cuerpo debajo', icon: 'story', id: 'builtin_repost_simple' },
+          { title: 'Título arriba - Post en el medio - Texto abajo', hint: 'Título, publicación y cuerpo', icon: 'storyShared', id: 'builtin_repost_shared' },
+        ],
+      },
+      {
+        title: 'Artículos', hint: 'Para compartir un artículo', icon: 'article',
+        children: [
+          { title: 'Artículo general', hint: 'Titular, portada y resumen', icon: 'article', id: 'builtin_article' },
+          { title: 'Diario Socialista', hint: 'Titular del diario sobre tu foto', icon: 'article', id: 'builtin_diario_socialista' },
+        ],
+      },
+      {
+        title: 'Imágenes', hint: 'Tu foto con stickers o ubicación', icon: 'photo',
+        children: [
+          { title: 'Imagen + stickers', hint: 'Tu imagen con stickers y textos que mueves a mano', icon: 'compose', id: 'compose_photo' },
+          { title: 'Foto con ubicación', hint: 'Tu foto con la ubicación', icon: 'photo', id: 'photo_location' },
+        ],
+      },
     ],
   },
   {
     title: 'Textos', hint: 'Rótulos y cuerpos para stories', icon: 'title',
     children: [
-      { title: 'Título', hint: 'Rótulo grande', icon: 'title', id: 'sticker_title' },
-      { title: 'Texto', hint: 'Cuerpo de texto', icon: 'text', id: 'sticker_body' },
-      { title: 'Texto con fondo', hint: 'Cuerpo sobre fondo de color', icon: 'text', id: 'sticker_body_pill' },
+      { title: 'Título', hint: 'Rótulo grande, con fondo si quieres', icon: 'title', id: 'sticker_title' },
+      { title: 'Texto', hint: 'Cuerpo de texto, con fondo si quieres', icon: 'text', id: 'sticker_body' },
     ],
   },
   {
     title: 'Stickers', hint: 'PNG listos para descargar', icon: 'star',
     children: [
       { title: 'Ubicación', hint: 'Pin con el nombre del lugar', icon: 'pin', id: 'sticker_location' },
-      {
-        title: 'Recursos de marca', hint: 'Logos y stickers de la marca', icon: 'layers',
-        children: (brand) => [
-          { title: `Logo ${FONT_SETS[brand].label}`, hint: brand === 'ajt' ? 'Editable: pones la ubicación' : 'Todas las versiones de color', icon: 'logo', id: LOGO_BY_BRAND[brand] },
-          ...(brand === 'cjs' ? [{ title: '¿Quieres militar?', hint: 'Sticker de captación', icon: 'flag', id: 'sticker_militar' }] : []),
-        ],
-      },
+      { title: 'Fechas', hint: 'Rótulo de fecha, con fondo si quieres', icon: 'calendar', id: 'sticker_date' },
+      { title: 'Logo AJT', hint: 'Editable: pones la ubicación', icon: 'logo', id: 'logo_ajt' },
       {
         title: 'Temáticos', hint: 'Campañas y movilizaciones', icon: 'flag',
         children: [
@@ -54,31 +59,21 @@ const MENU = [
       },
     ],
   },
-  {
-    title: 'Comunidad', hint: 'Stickers y textos de los comités', icon: 'layers',
-    children: [
-      { title: 'Stickers de la comunidad', hint: 'Sube el tuyo o usa uno de otro comité', icon: 'star', community: 'stickers' },
-      { title: 'Textos guardados', hint: 'Consignas y convocatorias para reutilizar', icon: 'text', community: 'texts' },
-    ],
-  },
 ];
 
-export function initHome({ root, getBrand, onBrand, onOpen, onCommunitySticker, onCommunityText }) {
+export function initHome({ root, onOpen }) {
   let path = []; // índices elegidos en cada nivel
   let openedFrom = []; // nivel del menú desde el que se abrió la plantilla en curso
 
-  const resolve = (node, brand) => (typeof node.children === 'function' ? node.children(brand) : node.children);
-
-  function currentLevel(brand) {
+  function currentLevel() {
     let items = MENU;
     const crumbs = [];
     for (const i of path) {
       const node = items[i];
       if (!node) break;
       crumbs.push(node);
-      if (node.community) return { items: [], crumbs, communityNode: node };
       if (!node.children) break;
-      items = resolve(node, brand);
+      items = node.children;
     }
     return { items, crumbs };
   }
@@ -86,7 +81,7 @@ export function initHome({ root, getBrand, onBrand, onOpen, onCommunitySticker, 
   function row(node, index) {
     const b = document.createElement('button');
     b.type = 'button';
-    const opensLevel = node.children || node.community;
+    const opensLevel = !!node.children;
     b.className = 'menu-row' + (opensLevel ? '' : ' leaf');
     b.innerHTML = `<span class="menu-ic">${icon(node.icon, 26)}</span><span class="menu-text"><strong></strong><small></small></span><span class="menu-go">${icon(opensLevel ? 'chevron' : 'plus', 20)}</span>`;
     b.querySelector('strong').textContent = node.title;
@@ -98,19 +93,17 @@ export function initHome({ root, getBrand, onBrand, onOpen, onCommunitySticker, 
   }
 
   function render() {
-    const brand = getBrand();
     root.innerHTML = '';
-    root.style.setProperty('--display', `"${titleFamily()}", "Acumin Variable", sans-serif`);
     const inner = document.createElement('div');
     inner.className = 'home-inner';
 
-    // cabecera: logo de la marca activa + sonido
+    // cabecera: logo de AJT Villalba + sonido
     const top = document.createElement('div');
     top.className = 'home-top';
     const logo = document.createElement('img');
     logo.className = 'home-logo';
-    logo.src = logoSrcFor('icon-on-black');
-    logo.alt = FONT_SETS[brand].label;
+    logo.src = villalbaSrc('original-blanco', 'compacto');
+    logo.alt = 'AJT Villalba';
     top.appendChild(logo);
     const sound = document.createElement('button');
     sound.type = 'button';
@@ -126,23 +119,7 @@ export function initHome({ root, getBrand, onBrand, onOpen, onCommunitySticker, 
     top.appendChild(sound);
     inner.appendChild(top);
 
-    // marca
-    const brands = document.createElement('div');
-    brands.className = 'home-brands';
-    brands.setAttribute('role', 'group');
-    brands.setAttribute('aria-label', 'Marca');
-    Object.values(FONT_SETS).forEach((set) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'home-brand' + (set.key === brand ? ' active' : '');
-      b.setAttribute('aria-pressed', String(set.key === brand));
-      b.textContent = set.label;
-      b.addEventListener('click', async () => { await onBrand(set.key); render(); });
-      brands.appendChild(b);
-    });
-    inner.appendChild(brands);
-
-    const { items, crumbs, communityNode } = currentLevel(brand);
+    const { items, crumbs } = currentLevel();
     const head = document.createElement('div');
     head.className = 'home-head';
     if (crumbs.length) {
@@ -159,27 +136,15 @@ export function initHome({ root, getBrand, onBrand, onOpen, onCommunitySticker, 
     head.appendChild(h);
     inner.appendChild(head);
 
-    if (communityNode) {
-      const content = document.createElement('div');
-      content.className = 'community-content';
-      inner.appendChild(content);
-      renderCommunitySection(content, {
-        kind: communityNode.community,
-        brand,
-        onPickSticker: (item) => onCommunitySticker(item),
-        onPickText: (text) => onCommunityText(text),
-      });
-    } else {
-      const list = document.createElement('div');
-      list.className = 'menu-list';
-      items.forEach((node, i) => list.appendChild(row(node, i)));
-      inner.appendChild(list);
-    }
+    const list = document.createElement('div');
+    list.className = 'menu-list';
+    items.forEach((node, i) => list.appendChild(row(node, i)));
+    inner.appendChild(list);
 
     root.appendChild(inner);
   }
 
-  // El rótulo grande usa la tipografía de la marca: se carga antes de pintar
+  // El rótulo grande usa la tipografía de AJT: se carga antes de pintar
   async function paint(newPath) {
     path = newPath;
     try { await ensureFonts([`800 40px "${titleFamily()}"`]); } catch { /* se pinta con la de reserva */ }

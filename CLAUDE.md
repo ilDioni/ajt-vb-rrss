@@ -1,41 +1,42 @@
-# Stories RRSS — notas para Claude
+# Stories AJT — notas para Claude
 
 Responde en castellano, con lenguaje sencillo: el usuario no es programador.
 
-App web (PWA) para hacer stories y stickers de Instagram con la identidad de CJS, OES y AJT sin Photoshop.
-Publicada en GitHub Pages: https://cjsocialista00.github.io/stories-rrss/ (repo CJSocialista00/stories-rrss,
-rama main). Actualizar = commit + `git push` **solo cuando el usuario lo pida**.
+App web (PWA) para hacer stories y stickers de Instagram con la identidad de AJT (Asamblea de la Juventud
+Trabajadora) sin Photoshop. Solo AJT: CJS y OES se quitaron a propósito (2026-11-17), no volver a añadirlos.
+Repo ilDioni/ajt-vb-rrss, rama main; si GitHub Pages está activado se sirve en
+https://ildioni.github.io/ajt-vb-rrss/. Actualizar = commit + `git push` **solo cuando el usuario lo pida**.
 
 - Probar en local: `python devserver.py` (puerto 5500, también desde el móvil por la IP de la red).
 - Archivos clave: `src/main.js`, `src/engine/stageRenderer.js`, `src/engine/fontSets.js` (tipografías y
-  paletas por marca), `src/templates/` (plantillas, ubicación, logo AJT), `src/ui/` (interfaz).
-- Colores: CJS rojo #f54949, negro #282929, blanco. OES #ff4331, #ffffff, #000000, turquesa #1adcc8.
-  AJT según su manual: rojo #ff002c, crema #f3f3e8, negro #000000.
-- En los stickers de ubicación NO hay color libre: solo los colores de la marca activa.
+  paleta de AJT), `src/templates/` (plantillas, ubicación, logo AJT), `src/ui/` (interfaz).
+- Colores (manual de AJT): rojo #ff002c, crema #f3f3e8, negro #000000, blanco #ffffff.
+- En los stickers de ubicación NO hay color libre: solo los colores de AJT.
+- Ubicación por defecto en stickers, foto y logo editable: Villalba.
+- Plantilla Artículo: logo de Villalba (`assets/logos/villalba`, `src/templates/villalbaLogo.js`) siempre
+  abajo y centrado, fijo (sin mover, borrar, ocultar ni quitar del PNG). Versión alargada según el fondo:
+  blanco/crema → original negro; rojo → negro o blanco; negro → original blanco o blanco. Los PNG se usan
+  tal cual, con su margen transparente a la izquierda: NO recortarlo (lo pidió el usuario).
+- Plantilla Diario Socialista (`builtins.js`): foto de fondo fija + cabecera blanca/negra (`choices` en la
+  capa) + imagen del titular (slot `dsHeadline`: al subirla toma su proporción y la guía `dsLink` del enlace
+  se recoloca debajo, en `main.js`).
+- Hueco del enlace en Artículo y Diario Socialista: texto «↗ Enlace de Instagram» que SÍ sale en el PNG
+  (en el Diario Socialista, 100 px por debajo del titular: `DS_LINK_GAP`).
+- Repost «Título arriba - Post en el medio - Texto abajo»: logo de Villalba compacto (apilado) abajo a la
+  izquierda, versión a elegir entre las 4 (`villalbaFree`), capa normal (se mueve y se borra).
+- Menú (`src/ui/home.js`): Plantillas → Reposts / Artículos / Imágenes; Textos → Título / Texto;
+  Stickers → Ubicación / Fechas / Logo AJT / Temáticos.
+- Pastilla de fondo (capa `pill`, oculta = «Sin fondo»; blanco, negro, rojo o crema) en los stickers de
+  título, texto, fechas, ubicación y foto con ubicación. Esquinas a elegir en todas (`roundness` 0–1,
+  slider «Esquinas» en %). En título/fecha/ubicación el margen va en proporción a la letra (`PILL_PAD` en
+  `locationGenerator.js`) y el lienzo crece con ella (`regenerateQuick` en `main.js`). El sticker de Fechas
+  es el de título con `keepCase` (respeta minúsculas).
+- Logo editable de AJT: «Sin fondo» por defecto (PNG transparente) o «Pastilla» del color de fondo de la
+  combinación elegida (`ajtPill`, `ajtRound` en `ajtLogo.js`).
+- Negrita con `**así**` también en títulos (stickers de título/fecha, ubicación y títulos de plantillas):
+  esos textos se dibujan por "runs" como el cuerpo. Si la familia no tiene un corte más grueso (Thunder,
+  Black Condensed, PP Playground o ya en Bold) la negrita se simula con un trazo fino del mismo color.
+- Logo de la pantalla de inicio: AJT Villalba compacto, original blanco.
+- La sección «Comunidad» (Supabase) se quitó a propósito (2026-11-17): la app ya no usa ningún backend.
 - Interfaz sencilla: paneles únicos, sin controles redundantes, sin emojis ni degradados («plana de taller»).
 - Si dice que va lento: comprobar primero que se reinició el servidor y se recargó la página.
-
-## Comunidad (stickers y textos compartidos)
-
-Sección del menú "Comunidad" (`src/ui/communityPanel.js`, `src/lib/community.js`): cualquier comité puede
-subir un sticker (se recolorea igual que los oficiales) o guardar un texto, sin login, publicación
-inmediata y sin aprobación previa. El usuario modera después a mano desde el panel de Supabase (borra la
-fila y, si procede, el archivo del Storage).
-
-- Backend: proyecto Supabase **APP STORIES** (`https://rxppxgfbziqfqeowrppj.supabase.co`, región eu-west-3,
-  free tier). La clave usada en el cliente es la **`anon` clásica** (JWT, pestaña "Legacy" de API Keys) —
-  las claves nuevas `sb_publishable_...` de este proyecto dan 401 en `/rest/v1`, no sirven aquí.
-- Tablas: `community_items` (stickers y textos, columna `type`) y `community_tags` (etiquetas, sembrada con
-  "Consignas" de fábrica). RLS activo: `anon` solo puede insertar con `status='visible'` y leer lo visible;
-  sin update/delete desde el cliente.
-- Storage: bucket `community` (público en lectura, **sin límite de tamaño de archivo**, política de insert
-  para `anon`). Se quitó a propósito el límite inicial de 300 KB: un PNG en color de buena calidad supera
-  fácilmente ese tope, y no hay paso de conversión/reducción en el cliente (decisión del usuario, 2026-11-02).
-  Los borrados de Storage no se pueden hacer por SQL (`protect_delete()` lo impide): se borran desde
-  Storage → Files en el panel, no con `delete from storage.objects`.
-- Columna `brand` en `community_items` (texto, nullable): al subir un sticker se guarda ahí la marca activa
-  (`cjs`/`oes`/`ajt`), porque cada marca usa tipografías distintas y un sticker pensado para una no siempre
-  cuadra en otra. Por defecto la galería solo muestra los de tu marca + los que no tienen marca (`brand IS
-  NULL`, "valen para todas"); el botón "Mostrar todos" en `communityPanel.js` quita ese filtro. No hay forma
-  de marcar un sticker como "vale para todas" al subirlo (se decidió no complicar el formulario); si hace
-  falta, se cambia a mano en Supabase poniendo `brand = NULL` en esa fila.

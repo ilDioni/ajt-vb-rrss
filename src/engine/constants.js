@@ -2,40 +2,12 @@
 export const CANVAS_W = 1080;
 export const CANVAS_H = 1920;
 
+// Colores de AJT (los mismos que la paleta de fontSets.js)
 export const COLORS = {
-  black: '#282929',
-  red: '#f54949',
+  black: '#000000',
+  red: '#ff002c',
   white: '#ffffff',
 };
-
-// Tipografía: instancias estáticas reales de Acumin Variable (src/fonts.css).
-// Cada ancho es una familia con sus 9 pesos en normal y en cursiva REAL; la
-// cursiva se pide con "italic" en el string de fuente y el navegador usa esa
-// variante (no inclina artificialmente).
-export const FONT_FAMILY = 'CJS Acumin';
-export const FONT_FAMILY_ITALIC = 'CJS Acumin';
-export const FONT_FAMILY_TITLE = 'CJS Acumin ExtraCondensed';
-export const FONT_FAMILY_TITLE_ITALIC = 'CJS Acumin ExtraCondensed';
-
-export const FONT_WIDTH_VARIANTS = [
-  { key: 'extracondensed', label: 'Extra condensada', family: 'CJS Acumin ExtraCondensed', familyItalic: 'CJS Acumin ExtraCondensed' },
-  { key: 'condensed', label: 'Condensada', family: 'CJS Acumin Condensed', familyItalic: 'CJS Acumin Condensed' },
-  { key: 'semicondensed', label: 'Semicondensada', family: 'CJS Acumin SemiCondensed', familyItalic: 'CJS Acumin SemiCondensed' },
-  { key: 'normal', label: 'Normal', family: 'CJS Acumin', familyItalic: 'CJS Acumin' },
-  { key: 'wide', label: 'Ancha', family: 'CJS Acumin Wide', familyItalic: 'CJS Acumin Wide' },
-];
-
-export const FONT_WEIGHT_VARIANTS = [
-  { key: 'thin', label: 'Thin', weight: 100 },
-  { key: 'extralight', label: 'ExtraLight', weight: 200 },
-  { key: 'light', label: 'Light', weight: 300 },
-  { key: 'regular', label: 'Regular', weight: 400 },
-  { key: 'medium', label: 'Medium', weight: 500 },
-  { key: 'semibold', label: 'Semibold', weight: 600 },
-  { key: 'bold', label: 'Bold', weight: 700 },
-  { key: 'black', label: 'Black', weight: 800 },
-  { key: 'ultrablack', label: 'UltraBlack', weight: 900 },
-];
 
 // Proporciones estándar de publicaciones de Instagram para el marco de "compartido"
 export const ASPECT_PRESETS = [

@@ -1,10 +1,9 @@
-import { bodyWeights } from './richText.js';
-import { getWidthVariant, snapWeight, getInitialFont, FONT_FILES } from './fontSets.js';
+import { bodyWeights, hasBoldMarkers } from './richText.js';
+import { getWidthVariant, snapWeight, FONT_FILES } from './fontSets.js';
 
-// Las fuentes (90 de Acumin, más las de OES y AJT) no se descargan todas al
-// abrir la app: solo las que usa el documento actual, justo antes de
-// medir/dibujar. Así el arranque en el móvil es ligero y cambiar de
-// peso/ancho/cursiva/juego de tipografía carga solo esa variante.
+// Las fuentes no se descargan todas al abrir la app: solo las que usa el
+// documento actual, justo antes de medir/dibujar. Así el arranque en el móvil
+// es ligero y cambiar de corte/cursiva carga solo esa variante.
 
 function familyFor(widthKey) {
   return getWidthVariant(widthKey).family;
@@ -19,9 +18,9 @@ export function fontSpecsForState(state) {
     const family = familyFor(d.widthVariant || (isTitle ? 'extracondensed' : 'normal'));
     const style = d.italic ? 'italic ' : '';
     if (isTitle) {
-      specs.add(`${style}${snapWeight(family, d.weight || 800)} 100px "${family}"`);
-      const ini = getInitialFont(d);
-      if (ini) specs.add(`${ini.style === 'italic' ? 'italic ' : ''}${ini.weight} 100px "${ini.family}"`);
+      const { normal, bold } = bodyWeights(d);
+      specs.add(`${style}${snapWeight(family, normal)} 100px "${family}"`);
+      if (hasBoldMarkers(d.text)) specs.add(`${style}${snapWeight(family, bold)} 100px "${family}"`);
     } else {
       const { normal, bold } = bodyWeights(d); // base + negrita parcial (**así**)
       specs.add(`${style}${snapWeight(family, normal)} 100px "${family}"`);
@@ -55,18 +54,9 @@ function faceFor(spec) {
 }
 
 // Ruta del archivo de cada fuente (mismo esquema que src/fonts.css).
-const FAMILY_FILE_KEY = {
-  'CJS Acumin ExtraCondensed': 'extracondensed',
-  'CJS Acumin Condensed': 'condensed',
-  'CJS Acumin SemiCondensed': 'semicondensed',
-  'CJS Acumin': 'normal',
-  'CJS Acumin Wide': 'wide',
-};
 function fontPath({ family, weight, style }) {
-  const other = FONT_FILES[family];
-  if (other) return `assets/fonts/${other.dir}/${other.base}-${weight}-${style}.woff`;
-  const key = FAMILY_FILE_KEY[family];
-  return key ? `assets/fonts/acumin/acumin-${key}-${weight}-${style}.woff` : null;
+  const info = FONT_FILES[family];
+  return info ? `assets/fonts/${info.dir}/${info.base}-${weight}-${style}.woff` : null;
 }
 
 // Una descarga fallida (corte de red en el móvil) deja el FontFace en estado

@@ -23,6 +23,7 @@ export function buildComposeDoc() {
     canvas: { width, height },
     templateName: 'Imagen + stickers',
     quickGenerator: 'compose',
+    templateVersion: 2,
     layers: [
       { ...makeImageLayer({ name: 'Foto', src: null, fit: 'cover', locked: true, x: 0, y: 0, width, height }), composeBase: true },
     ],
@@ -125,7 +126,7 @@ export async function renderLocationPNG(city, color) {
   stage.destroy();
   return { src: url, width: g.canvasW, height: g.canvasH, city: g.cityName };
 }
-export async function addLocationSticker(city = 'MADRID') {
+export async function addLocationSticker(city = 'VILLALBA') {
   const color = brandColor('white');
   const r = await renderLocationPNG(city, color);
   const w = canvas().width * 0.46;
@@ -145,7 +146,7 @@ export async function editLocation(layer, patch) {
   updateLayer(layer.id, { src: r.src, height: layer.width * r.height / r.width, cmpText: r.city, cmpColor: color });
 }
 
-// ---- imágenes ya hechas (logos CJS/OES, stickers temáticos) ----
+// ---- imágenes ya hechas (stickers temáticos) ----
 export function addImageSticker(item, { name, widthRatio = 0.5 } = {}) {
   const w = canvas().width * widthRatio;
   const h = w * item.height / item.width;

@@ -32,7 +32,7 @@ export function renderLayerList(container, { onSelect } = {}) {
 
     item.appendChild(typeIcon);
     item.appendChild(name);
-    item.appendChild(vis);
+    if (!layer.required) item.appendChild(vis); // capas obligatorias (logo de Villalba): siempre visibles
     container.appendChild(item);
   });
 }

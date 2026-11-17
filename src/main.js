@@ -1,8 +1,9 @@
 import { getState, loadDocument, addLayer, undo, redo, updateLayer, serializeDocument, setCanvasSize, subscribe } from './engine/state.js';
-import { computeTextTitleGeometry, computeLocationGeometry, computePhotoBadgeGeometry, pinAssetForColor, buildTextBodyDoc } from './templates/locationGenerator.js';
+import { computeTextTitleGeometry, computeLocationGeometry, computePhotoBadgeGeometry, pinAssetForColor } from './templates/locationGenerator.js';
 import { StageRenderer, exportPNG, exportLayersSeparately } from './engine/stageRenderer.js';
 import { makeTextLayer, makeImageLayer, makeLogoLayer, makePinLayer, makeFrameLayer, makeBackgroundLayer } from './engine/layerFactory.js';
 import { listTemplates, loadTemplateDoc, saveAsNewTemplate, deleteTemplate } from './templates/store.js';
+import { DS_LINK_GAP } from './templates/builtins.js';
 import { renderLayerList } from './ui/layerList.js';
 import { renderProps, renderQuickPanel, renderGalleryPanel, renderAjtLogoPanel } from './ui/propsPanel.js';
 import { initHome } from './ui/home.js';
@@ -10,14 +11,13 @@ import { paintIcons, icon } from './ui/icons.js';
 import { initUiSounds } from './lib/sound.js';
 import { renderComposePanel } from './ui/composePanel.js';
 import { drawAjtLogo, ensureAjtLogoAssets, ajtVariant, ajtColor } from './templates/ajtLogo.js';
-import { GALLERIES, galleryItem, buildGalleryDoc, registerCommunityItem, galleryFileName, galleryColorFileName } from './templates/gallery.js';
-import { recolorBlob, loadImg } from './lib/recolor.js';
-import { publicImageUrl } from './lib/community.js';
+import { GALLERIES, galleryItem, galleryFileName, galleryColorFileName } from './templates/gallery.js';
+import { recolorBlob } from './lib/recolor.js';
 import { dataURLToBlob, dataURLToUint8Array, downloadBlob } from './lib/download.js';
 import { createZip } from './lib/zip.js';
 import { layoutRichText, bodyWeights } from './engine/richText.js';
 import { ensureFonts, ensureFontsFor } from './engine/fonts.js';
-import { FONT_SETS, getFontSetKey, setFontSetKey, getWidthVariant, titleFamily, snapWeight, brandColor, brandHexes, recolorPatch } from './engine/fontSets.js';
+import { getWidthVariant, titleFamily, snapWeight, brandColor, brandHexes } from './engine/fontSets.js';
 
 const stageContainer = document.getElementById('stageContainer');
 const layerListEl = document.getElementById('layerList');
@@ -34,8 +34,8 @@ let currentTemplateId = null;
 let home;
 
 async function waitFonts() {
-  // solo el rótulo del juego de tipografía activo (en CJS, ExtraCondensed
-  // Black Itálica); el resto se carga bajo demanda con ensureFonts()
+  // solo el rótulo (Thunder cursiva); el resto se carga bajo demanda con
+  // ensureFonts()
   const family = titleFamily();
   await ensureFonts([`italic ${snapWeight(family, 800)} 100px "${family}"`]);
 }
@@ -74,11 +74,15 @@ function regenerateQuick() {
       widthVariant: text.widthVariant || 'extracondensed',
       weight: text.weight || 800,
       italic: text.italic !== false,
-      initialFont: text.initialFont || null,
+      keepCase: !!text.keepCase,
     });
-    setCanvasSize(g.canvasW, g.canvasH);
+    // con fondo, el lienzo crece lo que ocupa el margen de la pastilla
+    const pill = state.layers.find((l) => l.type === 'pill');
+    const off = pill && pill.visible !== false ? g.pillPad : 0;
+    if (pill) updateLayer(pill.id, { padding: g.pillPad }, { history: false });
+    setCanvasSize(g.canvasW + off * 2, g.canvasH + off * 2);
     updateLayer(text.id, {
-      text: g.text, x: g.textX, y: g.textY, width: g.textW, height: g.textH,
+      text: g.text, x: g.textX + off, y: g.textY + off, width: g.textW, height: g.textH,
       fontSize: g.fontSize, letterSpacing: g.letterSpacing, locked: true, autoFit: false,
     }, { history: false });
   } else if (mode === 'body') {
@@ -88,7 +92,7 @@ function regenerateQuick() {
     // los elige el usuario; el texto salta de línea solo (las palabras
     // demasiado largas se parten) y el sticker crece en alto/ancho según lo
     // escrito. Antes la caja era fija y el texto se salía por la derecha.
-    const pill = state.layers.find((l) => l.type === 'pill' && l.targetId === text.id);
+    const pill = state.layers.find((l) => l.type === 'pill' && l.targetId === text.id && l.visible !== false);
     const fontSize = text.fontSize || 64;
     const lineWidth = text.lineWidth || 1000;
     const align = text.align || 'left';
@@ -121,16 +125,21 @@ function regenerateQuick() {
     const text = state.layers.find((l) => l.type === 'text');
     if (!pin || !text) return;
     const g = computeLocationGeometry(text.text);
-    setCanvasSize(g.canvasW, g.canvasH);
-    updateLayer(pin.id, { asset: pinAssetForColor(text.color), tint: text.color || '#ffffff', x: g.pinX, y: g.pinY, width: g.pinW, height: g.pinH }, { history: false });
-    updateLayer(text.id, { text: g.cityName, x: g.textX, y: g.textY, width: g.textW, height: g.textH, fontSize: g.fontSize, letterSpacing: g.letterSpacing }, { history: false });
+    const pill = state.layers.find((l) => l.type === 'pill');
+    const off = pill && pill.visible !== false ? g.pillPad : 0;
+    if (pill) updateLayer(pill.id, { padding: g.pillPad }, { history: false });
+    setCanvasSize(g.canvasW + off * 2, g.canvasH + off * 2);
+    updateLayer(pin.id, { asset: pinAssetForColor(text.color), tint: text.color || '#ffffff', x: g.pinX + off, y: g.pinY + off, width: g.pinW, height: g.pinH }, { history: false });
+    updateLayer(text.id, { text: g.cityName, x: g.textX + off, y: g.textY + off, width: g.textW, height: g.textH, fontSize: g.fontSize, letterSpacing: g.letterSpacing }, { history: false });
   } else if (mode === 'photoLocation') {
     const pin = state.layers.find((l) => l.type === 'pin');
     const text = state.layers.find((l) => l.type === 'text');
     if (!pin || !text) return;
     const corner = pin.corner || 'bottom-left';
     const scale = pin.scale || 1;
-    const g = computePhotoBadgeGeometry(text.text, { corner, canvasW: state.canvas.width, canvasH: state.canvas.height, scale });
+    const pill = state.layers.find((l) => l.type === 'pill');
+    const g = computePhotoBadgeGeometry(text.text, { corner, canvasW: state.canvas.width, canvasH: state.canvas.height, scale, pill: !!pill && pill.visible !== false });
+    if (pill) updateLayer(pill.id, { padding: g.pillPad }, { history: false });
     updateLayer(pin.id, { asset: pinAssetForColor(text.color), tint: text.color || '#ffffff', corner, scale, x: g.pinX, y: g.pinY, width: g.pinW, height: g.pinH }, { history: false });
     updateLayer(text.id, { text: g.cityName, x: g.textX, y: g.textY, width: g.textW, height: g.textH, fontSize: g.fontSize, letterSpacing: g.letterSpacing }, { history: false });
   }
@@ -152,8 +161,9 @@ function updatePreviewBackground() {
   const galleryData = state.quickGenerator === 'gallery' && image ? galleryItem(image.galleryKey, image.itemKey) : null;
   const area = document.getElementById('canvasArea');
   area.classList.toggle('light-preview', (isSticker && isBlack) || !!(galleryData && galleryData.lightPreview));
-  // el logo de AJT se ve sobre el fondo de la combinación elegida (manual de marca)
-  area.style.background = state.quickGenerator === 'logoAjt' && image ? ajtColor(ajtVariant(image.ajtVariant).bg) : '';
+  // el logo de AJT sin pastilla se ve sobre el fondo de la combinación elegida
+  // (manual de marca; no sale en el PNG); con pastilla, la pastilla es el fondo
+  area.style.background = state.quickGenerator === 'logoAjt' && image && !image.ajtPill ? ajtColor(ajtVariant(image.ajtVariant).bg) : '';
 }
 
 // Se llama en cada tecla / paso de slider: varias llamadas dentro del mismo
@@ -232,9 +242,7 @@ function refreshProps() {
   if (state.quickGenerator === 'gallery') {
     const img = state.layers.find((l) => l.type === 'image');
     if (!img) return;
-    const gallery = img.galleryKey === 'community'
-      ? { title: (galleryItem('community', img.itemKey) || {}).label || 'Comunidad', items: [galleryItem('community', img.itemKey)].filter(Boolean) }
-      : GALLERIES[img.galleryKey];
+    const gallery = GALLERIES[img.galleryKey];
     if (!gallery || !gallery.items.length) return;
     renderGalleryPanel(propsContentEl, {
       gallery,
@@ -273,7 +281,7 @@ function refreshProps() {
     const text = state.layers.find((l) => l.type === 'text');
     if (text) selectedId = text.id;
   }
-  renderProps(propsContentEl, selectedId, { onChange: refreshCanvas, onRemove: refreshAll, onBrandChange: changeBrand });
+  renderProps(propsContentEl, selectedId, { onChange: refreshCanvas, onRemove: refreshAll });
 }
 
 function refreshLayers() {
@@ -312,45 +320,8 @@ function switchTab(tab) {
 }
 
 // ---- drawer de plantillas ----
-function openDrawer() { templatesDrawer.classList.remove('hidden'); populateFontSetPicker(); populateTemplateList(); }
+function openDrawer() { templatesDrawer.classList.remove('hidden'); populateTemplateList(); }
 function closeDrawer() { templatesDrawer.classList.add('hidden'); }
-
-// Juego de tipografía (CJS / OES / AJT): cambia solo la letra de todas las
-// plantillas; textos, colores y composición se quedan como están.
-// el color de acento de la interfaz es el rojo de la marca activa
-function applyAccent() {
-  document.documentElement.style.setProperty('--accent', brandColor('accent'));
-  document.documentElement.style.setProperty('--display', `"${titleFamily()}", "Acumin Variable", sans-serif`);
-}
-
-async function changeBrand(key) {
-  if (key === getFontSetKey()) return;
-  const previous = getFontSetKey();
-  setFontSetKey(key);
-  applyAccent();
-  // el diseño en curso pasa a los colores de la nueva marca (rojo → rojo
-  // de la marca, blanco, negro); el resto de plantillas lo hace al abrirse
-  getState().layers.slice().forEach((l) => {
-    const patch = recolorPatch(l, previous, key);
-    if (patch) updateLayer(l.id, patch, { history: false });
-  });
-  saveCurrentWorkspace();
-  persistWorkspaces();
-  populateFontSetPicker();
-  await refreshAll();
-}
-
-function populateFontSetPicker() {
-  const picker = document.getElementById('fontSetPicker');
-  picker.innerHTML = '';
-  Object.values(FONT_SETS).forEach((set) => {
-    const btn = document.createElement('button');
-    btn.className = 'fontset-btn' + (set.key === getFontSetKey() ? ' active' : '');
-    btn.innerHTML = `<strong>${set.label}</strong><span>${set.detail}</span>`;
-    btn.addEventListener('click', () => changeBrand(set.key));
-    picker.appendChild(btn);
-  });
-}
 
 function populateTemplateList() {
   templateListItems.innerHTML = '';
@@ -425,24 +396,13 @@ function saveCurrentWorkspace() {
   if (!currentTemplateId || switchingTemplate) return;
   // las galerías de stickers no guardan nada (son visores): se abren siempre limpias
   if (getState().quickGenerator === 'gallery') return;
-  // se anota la marca para traducir los colores si se abre con otra distinta
   const doc = serializeDocument();
   // el logo de AJT se redibuja desde sus ajustes: no se guarda el PNG (pesa)
   if (doc.quickGenerator === 'logoAjt') doc.layers = doc.layers.map((l) => (l.type === 'image' ? { ...l, src: null } : l));
-  workspaces.set(currentTemplateId, { ...doc, brand: getFontSetKey() });
+  // la marca se anota para distinguirlos de los guardados con CJS/OES (ver applyTemplate)
+  workspaces.set(currentTemplateId, { ...doc, brand: 'ajt' });
 }
 
-// Colores del documento traducidos de la marca en que se guardó a la activa
-function adoptBrand(doc, fromKey) {
-  const to = getFontSetKey();
-  if (!doc || fromKey === to) return doc;
-  const copy = JSON.parse(JSON.stringify(doc));
-  copy.layers.forEach((l) => {
-    const patch = recolorPatch(l, fromKey, to);
-    if (patch) Object.assign(l, patch);
-  });
-  return copy;
-}
 function persistWorkspaces() {
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
@@ -472,10 +432,11 @@ async function applyTemplate(id, { fresh = false } = {}) {
   let doc = workspaces.get(id) || freshDoc;
   // espacio guardado con una estructura antigua de la plantilla: se empieza de nuevo
   if (doc !== freshDoc && freshDoc && (doc.templateVersion || 1) !== (freshDoc.templateVersion || 1)) doc = freshDoc;
+  // espacio guardado cuando la app tenía también CJS/OES (otra marca, o de
+  // antes de anotarla): sus colores y letras no son de AJT, se empieza de nuevo
+  if (doc !== freshDoc && freshDoc && doc.brand !== 'ajt') doc = freshDoc;
   if (freshDoc && freshDoc.quickGenerator === 'gallery') doc = freshDoc;
   if (!doc) return;
-  // los diseños nuevos vienen en los colores de CJS; los guardados, en los de su marca
-  doc = adoptBrand(doc, doc === freshDoc ? 'cjs' : doc.brand || 'cjs');
   saveCurrentWorkspace(); // lo que había en la plantilla anterior se queda en su espacio
   switchingTemplate = true;
   currentTemplateId = id;
@@ -490,46 +451,6 @@ async function applyTemplate(id, { fresh = false } = {}) {
   await refreshAll();
   fitStage(); // cada plantilla puede tener un tamaño de lienzo distinto
   if (doc.quickGenerator) { openSheet(); switchTab('props'); }
-}
-
-// Abre un documento que no viene de una plantilla guardada (sticker/texto de
-// la comunidad): mismo camino que applyTemplate, pero sin id de espacio de
-// trabajo propio (currentTemplateId = null, así saveCurrentWorkspace() no
-// intenta guardarlo bajo ningún id).
-async function applyAdHocDoc(doc) {
-  currentTemplateId = null;
-  templateNameLabel.textContent = doc.templateName || 'Comunidad';
-  loadDocument(doc);
-  bottomSheet.classList.toggle('quick-mode', !!doc.quickGenerator);
-  updateExportButton();
-  await refreshAll();
-  fitStage();
-  if (doc.quickGenerator) { openSheet(); switchTab('props'); }
-}
-
-// Sticker de la comunidad: se registra con su tamaño real (hace falta para
-// el lienzo) y se abre con el mismo panel/descarga que los stickers oficiales.
-async function openCommunitySticker(item) {
-  const src = publicImageUrl(item.image_path);
-  try {
-    const img = await loadImg(src);
-    registerCommunityItem({
-      key: item.id, label: item.name || 'Sticker de la comunidad', src,
-      width: img.naturalWidth, height: img.naturalHeight, recolor: item.brand_recolor !== false,
-    });
-    home.hide();
-    await applyAdHocDoc(buildGalleryDoc('community', item.id));
-  } catch (err) {
-    console.error('Error abriendo sticker de comunidad', err);
-    alert('No se ha podido cargar este sticker.');
-  }
-}
-
-// Texto guardado de la comunidad: se abre como un sticker de cuerpo editable,
-// ya relleno con el texto, listo para darle estilo y descargar.
-function openCommunityText(text) {
-  home.hide();
-  applyAdHocDoc(buildTextBodyDoc(text, { community: true }));
 }
 
 // En los generadores rápidos (stickers, logos) el botón principal descarga
@@ -619,7 +540,6 @@ async function finalizeExport(dataURL) {
 }
 
 async function init() {
-  applyAccent();
   paintIcons();
   initUiSounds();
   await waitFonts();
@@ -683,12 +603,8 @@ async function init() {
   // topbar
   home = initHome({
     root: document.getElementById('homeScreen'),
-    getBrand: getFontSetKey,
-    onBrand: changeBrand,
     onOpen: async (id) => { home.hide(); await applyTemplate(id); },
     onOpenAll: () => { home.hide(); openDrawer(); },
-    onCommunitySticker: (item) => openCommunitySticker(item),
-    onCommunityText: (text) => openCommunityText(text),
     getLast: () => {
       try {
         const id = localStorage.getItem(LAST_TEMPLATE_KEY);
@@ -826,12 +742,21 @@ async function init() {
     pendingImageLayerId = null;
     fileInputImage.value = '';
     readImageScaled(file).then(async ({ src, width, height }) => {
+      const target = getState().layers.find((l) => l.id === layerId);
       if ((getState().quickGenerator === 'photoLocation' || getState().quickGenerator === 'compose') && width && height) {
         // Foto con ubicación: el lienzo toma el tamaño y la proporción REALES
         // de la foto (antes se recortaba a un 4:5 fijo); la ubicación se
         // recoloca después sobre ese tamaño en regenerateQuick().
         setCanvasSize(width, height);
         updateLayer(layerId, { src, x: 0, y: 0, width, height, fit: 'cover' });
+      } else if (target && target.slot === 'dsHeadline' && width && height) {
+        // Diario Socialista: el titular conserva ancho y posición y toma la
+        // proporción de la imagen (nunca se deforma ni se recorta); la guía
+        // del enlace se coloca justo debajo
+        const h = Math.round((target.width * height) / width);
+        updateLayer(layerId, { src, height: h });
+        const link = getState().layers.find((l) => l.slot === 'dsLink');
+        if (link) updateLayer(link.id, { y: target.y + h + DS_LINK_GAP }, { history: false });
       } else {
         updateLayer(layerId, { src });
       }

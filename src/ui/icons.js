@@ -25,6 +25,7 @@ const PATHS = {
   logo: '<path d="M3 19 11 4l5 15Z"/><path d="M18 9h3v10h-3z"/>',
   star: '<path d="m12 3 2.500 6 6.500.500-5 4.500 1.500 6.500L12 17l-5.500 3.500L8 14 3 9.500 9.500 9Z"/>',
   flag: '<path d="M5 21V4M5 5h13l-3 4 3 4H5"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15"/><path d="M4 10h16M9 3v4M15 3v4"/>',
   layers: '<path d="m12 4 9 5-9 5-9-5Z"/><path d="m3 14 9 5 9-5"/>',
   eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><path d="m4 4 16 16"/>',

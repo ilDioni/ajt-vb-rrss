@@ -47,13 +47,14 @@ export const AJT_LOGO_VARIANTS = [
   { key: 'rojo-negro', label: 'Fondo rojo · negro', text: 'dark', big: 'dark', small: 'dark', bg: 'accent' },
 ];
 export const AJT_LOGO_LAYOUTS = Object.entries(LAYOUTS).map(([key, l]) => ({ key, label: l.label }));
-export const AJT_LOGO_DEFAULTS = { ajtText: 'Carabanchel', ajtLayout: 'h', ajtVariant: 'crema' };
+// ajtPill: pastilla detrás del logo, del color de fondo de la combinación;
+// ajtRound: redondeo de sus esquinas (0 = rectas, 1 = extremos redondos)
+export const AJT_LOGO_DEFAULTS = { ajtText: 'Villalba', ajtLayout: 'h', ajtVariant: 'crema', ajtPill: false, ajtRound: 0.35 };
 
 export function ajtVariant(key) {
   return AJT_LOGO_VARIANTS.find((v) => v.key === key) || AJT_LOGO_VARIANTS[0];
 }
-// colores siempre los de AJT, aunque la marca activa sea otra
-export const ajtColor = (role) => brandColor(role, 'ajt');
+export const ajtColor = (role) => brandColor(role);
 
 const masks = {};
 function loadMask(src) {
@@ -90,7 +91,7 @@ function tinted(mask, color, w, h) {
  * Dibuja el logotipo. Devuelve { canvas, width, height }.
  * `ensureAjtLogoAssets()` debe haberse esperado antes.
  */
-export function drawAjtLogo({ ajtText, ajtLayout, ajtVariant: variantKey } = {}) {
+export function drawAjtLogo({ ajtText, ajtLayout, ajtVariant: variantKey, ajtPill = false, ajtRound = 0.35 } = {}) {
   const L = LAYOUTS[ajtLayout] || LAYOUTS.h;
   const v = ajtVariant(variantKey);
   const loc = (ajtText || '').trim() || 'Ubicación';
@@ -118,11 +119,21 @@ export function drawAjtLogo({ ajtText, ajtLayout, ajtVariant: variantKey } = {})
     locX = locLeft; iconX = locInkW + L.gapLocIcon; subX = iconX + iconW + L.gapIconText;
     width = subX + subW;
   }
+  // con pastilla, el logo va centrado sobre ella con un margen alrededor
+  const pad = ajtPill ? Math.round(L.height * 0.3) : 0;
   const canvas = document.createElement('canvas');
-  canvas.width = Math.ceil(width);
-  canvas.height = L.height;
+  canvas.width = Math.ceil(width) + pad * 2;
+  canvas.height = L.height + pad * 2;
   const ctx = canvas.getContext('2d');
   ctx.textRendering = 'geometricPrecision';
+  if (ajtPill) {
+    const r = (ajtRound * Math.min(canvas.width, canvas.height)) / 2;
+    ctx.fillStyle = ajtColor(v.bg);
+    ctx.beginPath();
+    ctx.roundRect(0, 0, canvas.width, canvas.height, r);
+    ctx.fill();
+    ctx.translate(pad, pad);
+  }
 
   ctx.drawImage(tinted(masks.big, ajtColor(v.big), iconW, iconH), iconX, L.iconY);
   ctx.drawImage(tinted(masks.small, ajtColor(v.small), iconW, iconH), iconX, L.iconY);
@@ -140,6 +151,7 @@ export function buildAjtLogoDoc() {
     canvas: { width: 6455, height: 579 },
     templateName: 'Logo AJT · editable',
     quickGenerator: 'logoAjt',
+    templateVersion: 2,
     layers: [
       {
         ...makeImageLayer({ name: 'Logo AJT', src: null, fit: 'contain', locked: true, x: 0, y: 0, width: 6455, height: 579 }),

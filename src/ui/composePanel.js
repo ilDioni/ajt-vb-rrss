@@ -1,5 +1,4 @@
 import { getState, updateLayer, removeLayer, selectLayer } from '../engine/state.js';
-import { getFontSetKey } from '../engine/fontSets.js';
 import { swatches } from './swatches.js';
 import { icon } from './icons.js';
 import { GALLERIES } from '../templates/gallery.js';
@@ -144,7 +143,7 @@ export function renderComposePanel(container, { renderer, onChange, onRefresh, r
         if (!cur) return;
         if (k === 'title') await editTitle(cur, { text: v });
         else if (k === 'body') editBody(cur, { text: v });
-        else await editLocation(cur, { text: v || 'MADRID' });
+        else await editLocation(cur, { text: v || 'VILLALBA' });
         onChange();
       }, k === 'location' ? 300 : 80);
       input.addEventListener('input', () => apply(input.value));
@@ -195,7 +194,6 @@ export function renderComposePanel(container, { renderer, onChange, onRefresh, r
 
   // ---------- selector de logos / temáticos ----------
   if (view === 'logos' || view === 'tematicos') {
-    const brand = getFontSetKey();
     const head = el('div', 'cp-head');
     head.appendChild(button(`${icon('back', 20)}Volver`, 'cp-back', () => setView('main')));
     head.appendChild(el('h3', 'cp-name', view === 'logos' ? 'Logo' : 'Temáticos'));
@@ -210,17 +208,12 @@ export function renderComposePanel(container, { renderer, onChange, onRefresh, r
       grid.appendChild(b);
     };
     if (view === 'logos') {
-      if (brand === 'ajt') {
-        const b = el('button', 'cp-pick text'); b.type = 'button';
-        b.appendChild(el('strong', '', 'Logo con ubicación')); b.appendChild(el('span', '', 'Editable'));
-        b.addEventListener('click', () => afterAdd(addAjtLogoSticker()));
-        grid.appendChild(b);
-      } else {
-        GALLERIES[brand === 'oes' ? 'logosOes' : 'logosCjs'].items.forEach((it) => addItem(it, it.label, 0.6));
-      }
+      const b = el('button', 'cp-pick text'); b.type = 'button';
+      b.appendChild(el('strong', '', 'Logo con ubicación')); b.appendChild(el('span', '', 'Editable'));
+      b.addEventListener('click', () => afterAdd(addAjtLogoSticker()));
+      grid.appendChild(b);
     } else {
       GALLERIES.huelga11n.items.filter((i) => i.recolor).forEach((it) => addItem(it, it.label, 0.6));
-      if (brand === 'cjs') GALLERIES.militar.items.forEach((it) => addItem(it, `¿Quieres militar? · ${it.label}`, 0.4));
     }
     root.appendChild(grid);
     return;

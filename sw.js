@@ -1,7 +1,7 @@
 // Red primero, caché como respaldo: siempre se carga la última versión
 // publicada y, sin conexión, la última que se vio. (Con "caché primero" los
 // móviles se quedaban con versiones antiguas tras cada actualización.)
-const CACHE_NAME = 'stories-rrss-v2';
+const CACHE_NAME = 'stories-ajt-v1';
 
 self.addEventListener('install', () => self.skipWaiting());
 

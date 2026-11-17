@@ -1,7 +1,7 @@
 /* =====================================================================
    Tema plano de taller: superficies sólidas, líneas finas, esquinas rectas
-   a poco radio, un solo color de acento (el de la marca activa) y la
-   tipografía de la marca como voz. Sin degradados, brillos ni emojis.
+   a poco radio, un solo color de acento (el rojo de AJT) y la tipografía
+   de la marca como voz. Sin degradados, brillos ni emojis.
    Se carga DESPUÉS de styles.css y lo sobrescribe.
    ===================================================================== */
 :root {
@@ -83,16 +83,9 @@ input[type="range"] { accent-color: var(--accent); height: 32px; }
 .home { background: var(--bg); padding: max(12px, env(safe-area-inset-top)) 0 max(24px, env(safe-area-inset-bottom)); }
 .home-inner { max-width: 560px; margin: 0 auto; padding: 0 20px; }
 .home-top { display: flex; align-items: center; justify-content: space-between; min-height: 56px; }
-.home-logo { height: 36px; width: auto; display: block; }
+.home-logo { height: 48px; width: auto; display: block; margin-bottom: 18px; }
 .home-sound { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--text-dim); border-radius: var(--radius); cursor: pointer; }
 .home-sound:hover { color: var(--text); background: var(--panel-light); }
-.home-brands { display: flex; gap: 24px; border-bottom: 1px solid var(--border); margin: 4px 0 20px; }
-.home-brand {
-  position: relative; background: transparent; border: none; color: var(--text-dim); cursor: pointer;
-  font-family: inherit; font-size: 16px; font-weight: 700; letter-spacing: 0.04em; min-height: 48px; padding: 0 2px;
-}
-.home-brand.active { color: var(--text); }
-.home-brand.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: var(--accent); }
 .home-head { margin-bottom: 8px; }
 .home-back { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-left: -6px; padding: 0 8px 0 4px; background: transparent; border: none; color: var(--text-dim); font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; border-radius: var(--radius); }
 .home-back:hover { color: var(--text); }
@@ -184,6 +177,4 @@ input[type="range"] { accent-color: var(--accent); height: 32px; }
 .cp-slider input[type="range"] { width: 100%; min-height: 36px; }
 
 /* ajustes sobre reglas antiguas de styles.css */
-.home-brand { flex: 0 0 auto; border-radius: 0; border: none; background: transparent; box-shadow: none; }
-.home-brand.active { background: transparent; box-shadow: none; color: var(--text); }
 .home-back { margin-bottom: 0; }

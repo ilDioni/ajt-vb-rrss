@@ -1,5 +1,6 @@
 import { CANVAS_W, CANVAS_H, COLORS } from '../engine/constants.js';
 import { makeTextLayer, makeImageLayer, makeLogoLayer, makeFrameLayer, makeGradientLayer, makeBackgroundLayer } from '../engine/layerFactory.js';
+import { makeVillalbaLogoLayer, VILLALBA_LOGO_ASPECT } from './villalbaLogo.js';
 
 const MARGIN = 80;
 
@@ -9,7 +10,7 @@ function repostSimple() {
   const imgH = 980;
   return {
     canvas: { width: CANVAS_W, height: CANVAS_H },
-    templateName: 'Repost · Título y cuerpo debajo',
+    templateName: 'Post arriba - Texto abajo',
     templateVersion: 2,
     layers: [
       makeFrameLayer({
@@ -39,15 +40,20 @@ function repostSimple() {
   };
 }
 
-// 2) Repost con publicación compartida: Título / marco de "compartido" (Instagram) / cuerpo
+// 2) Repost con publicación compartida: Título / marco de "compartido" (Instagram)
+//    / cuerpo, con el logo apilado de Villalba abajo a la izquierda
 function repostShared() {
   const frameW = CANVAS_W - MARGIN * 2;
   const frameH = (frameW * 5) / 4; // 4:5 por defecto
   const frameY = 420;
+  const bodyY = frameY + frameH + 30;
+  // logo alineado con el margen izquierdo del texto; el cuerpo acaba antes
+  const logoW = 360;
+  const logoY = CANVAS_H - 90 - logoW * VILLALBA_LOGO_ASPECT.compacto;
   return {
     canvas: { width: CANVAS_W, height: CANVAS_H },
-    templateName: 'Repost · Título + publicación + cuerpo',
-    templateVersion: 2,
+    templateName: 'Título arriba - Post en el medio - Texto abajo',
+    templateVersion: 3,
     layers: [
       makeTextLayer({
         name: 'Título', role: 'title',
@@ -63,21 +69,16 @@ function repostShared() {
       makeTextLayer({
         name: 'Cuerpo', role: 'body',
         text: 'Texto de cuerpo con el contexto y **la reflexión** sobre la publicación compartida.',
-        x: MARGIN, y: frameY + frameH + 50, width: CANVAS_W - MARGIN * 2, height: 400,
+        x: MARGIN, y: bodyY, width: CANVAS_W - MARGIN * 2, height: logoY - 25 - bodyY,
         color: COLORS.white, autoFit: false, fontSize: 44,
       }),
-      makeLogoLayer({
-        name: 'Logo (sticker)',
-        asset: 'full',
-        x: CANVAS_W - MARGIN - 150, y: CANVAS_H - 220,
-        width: 130, height: 130,
-      }),
+      makeVillalbaLogoLayer({ x: MARGIN, y: logoY, width: logoW, layout: 'compacto', free: true }),
     ],
   };
 }
 
 // 3) Artículo (plantilla fija): título principal + subtítulo (desactivable) +
-//    portada + cuerpo autoajustable + hueco enlace + logos
+//    portada + cuerpo autoajustable + hueco enlace + logo de Villalba (fijo)
 // arranca por debajo de la zona que tapa la barra superior de Instagram
 // (barras de progreso + avatar/nombre, ~200px de 1920)
 export const ARTICLE_TITLE_Y = 230;
@@ -90,10 +91,10 @@ function articleFixed() {
   const coverH = 640;
   return {
     canvas: { width: CANVAS_W, height: CANVAS_H },
-    templateName: 'Artículo (fija)',
+    templateName: 'Artículo general',
     // al cambiar la estructura de esta plantilla se sube la versión para que
     // los espacios de trabajo guardados con la estructura vieja se descarten
-    templateVersion: 3,
+    templateVersion: 6,
     layers: [
       makeBackgroundLayer({
         name: 'Fondo', x: 0, y: 0, width: CANVAS_W, height: CANVAS_H, color: '#ffffff',
@@ -123,24 +124,69 @@ function articleFixed() {
       }),
       makeTextLayer({
         name: 'Espacio enlace (Instagram)', role: 'body',
-        text: '↗ Espacio para el sticker de enlace de Instagram',
+        text: '↗ Enlace de Instagram',
         x: MARGIN, y: CANVAS_H - 330, width: CANVAS_W - MARGIN * 2, height: 90,
         color: '#888888', autoFit: false, fontSize: 28, align: 'center',
       }),
-      makeImageLayer({
-        name: 'Logo del medio (izquierda)', src: null, fit: 'contain',
-        x: MARGIN, y: CANVAS_H - 190, width: 110, height: 110,
-      }),
-      makeLogoLayer({
-        name: 'Logo corporativo (abajo)', asset: 'icon-on-white',
-        x: CANVAS_W - MARGIN - 110, y: CANVAS_H - 190, width: 110, height: 110,
-      }),
+      // abajo, centrado a lo ancho, a la altura de la antigua fila de logos
+      makeVillalbaLogoLayer({ x: MARGIN, y: CANVAS_H - 135 - ((CANVAS_W - MARGIN * 2) * VILLALBA_LOGO_ASPECT.alargado) / 2, width: CANVAS_W - MARGIN * 2 }),
+    ],
+  };
+}
+
+// 4) Diario Socialista: foto de fondo + cabecera «DIARIO SOCIALISTA» (blanca
+//    o negra) + imagen del titular (captura de la web) + hueco del enlace.
+//    Medidas sacadas de una story real del diario.
+const dsLogoSrc = (color) => `./assets/logos/diario-socialista/diario-socialista-${color}.png`;
+// separación entre la imagen del titular y la guía del enlace (main.js la
+// recoloca con esta distancia al subir la imagen)
+export const DS_LINK_GAP = 100;
+function diarioSocialista() {
+  const cardX = 110;
+  const cardW = CANVAS_W - cardX * 2;
+  const cardY = 555;
+  const cardH = 680;
+  // el PNG de la cabecera mide 1085x134 y la tinta empieza a 29 px del borde
+  // izquierdo: se adelanta para que el texto quede alineado con el titular
+  const logoW = 524;
+  return {
+    canvas: { width: CANVAS_W, height: CANVAS_H },
+    templateName: 'Diario Socialista',
+    templateVersion: 3,
+    layers: [
+      {
+        ...makeImageLayer({ name: 'Foto de fondo', x: 0, y: 0, width: CANVAS_W, height: CANVAS_H, fit: 'cover', locked: true }),
+        placeholderText: '+ foto de fondo', placeholderAlign: 'bottom',
+      },
+      {
+        ...makeImageLayer({
+          name: 'Cabecera Diario Socialista', src: dsLogoSrc('blanco'), fit: 'contain',
+          x: cardX - Math.round((29 * logoW) / 1085), y: 460, width: logoW, height: (logoW * 134) / 1085,
+        }),
+        choices: [{ label: 'Blanco', src: dsLogoSrc('blanco') }, { label: 'Negro', src: dsLogoSrc('negro') }],
+      },
+      {
+        // 'contain': al subir la imagen, el recuadro toma su proporción (main.js)
+        ...makeImageLayer({ name: 'Titular (imagen)', fit: 'contain', x: cardX, y: cardY, width: cardW, height: cardH }),
+        slot: 'dsHeadline', placeholderText: '+ imagen del titular',
+      },
+      {
+        // marca dónde poner el sticker de enlace de Instagram
+        ...makeTextLayer({
+          name: 'Espacio enlace (Instagram)', role: 'body',
+          text: '↗ Enlace de Instagram',
+          x: cardX, y: cardY + cardH + DS_LINK_GAP, width: cardW, height: 90,
+          color: '#888888', autoFit: false, fontSize: 28, align: 'center',
+        }),
+        slot: 'dsLink',
+      },
     ],
   };
 }
 
 export const BUILTIN_TEMPLATES = [
-  { id: 'builtin_repost_simple', name: 'Repost · Título y cuerpo debajo', builtin: true, doc: repostSimple },
-  { id: 'builtin_repost_shared', name: 'Repost · Título + publicación + cuerpo', builtin: true, doc: repostShared },
-  { id: 'builtin_article', name: 'Artículo (fija)', builtin: true, doc: articleFixed },
+  { id: 'builtin_repost_simple', name: 'Post arriba - Texto abajo', builtin: true, category: 'Reposts', doc: repostSimple },
+  { id: 'builtin_repost_shared', name: 'Título arriba - Post en el medio - Texto abajo', builtin: true, category: 'Reposts', doc: repostShared },
+  { id: 'builtin_article', name: 'Artículo general', builtin: true, category: 'Artículos', doc: articleFixed },
+  { id: 'builtin_diario_socialista', name: 'Diario Socialista', builtin: true, category: 'Artículos', doc: diarioSocialista },
 ];

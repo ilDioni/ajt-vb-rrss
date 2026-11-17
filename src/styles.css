@@ -7,8 +7,9 @@
   --border: #3d3f3f;
   --text: #f2f2f2;
   --text-dim: #a8a8a8;
-  --accent: #f54949;
-  --accent-hover: #ff5f5f;
+  --accent: #ff002c;
+  --accent-hover: #ff3355;
+  --display: "AJT Thunder", sans-serif;
   --radius: 8px;
 }
 
@@ -19,7 +20,7 @@ html, body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: 'Acumin Variable', system-ui, sans-serif;
+  font-family: system-ui, sans-serif;
   overflow: hidden;
 }
 
@@ -166,23 +167,6 @@ h3 {
 .template-item .tpl-name { flex: 1; }
 .template-item .tpl-del { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 13px; }
 .drawer-footer { margin-top: 12px; }
-
-/* selector de juego de tipografía (CJS / OES / AJT) */
-.fontset-picker { display: flex; gap: 6px; margin-bottom: 8px; }
-.fontset-btn {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 8px 4px;
-  background: var(--panel-light);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  cursor: pointer;
-}
-.fontset-btn strong { font-size: 15px; }
-.fontset-btn span { font-size: 10px; color: var(--text-dim); }
-.fontset-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.fontset-btn.active span { color: rgba(255, 255, 255, 0.85); }
 
 /* ---- bottom sheet ---- */
 #bottomSheet {
@@ -415,9 +399,12 @@ select {
   justify-content: center;
 }
 .logo-variant-swatch img { width: 40px; height: 40px; object-fit: contain; }
+/* logos alargados (Villalba): la muestra ocupa todo el ancho del botón */
+.logo-variant-swatch.wide { width: 100%; height: 44px; padding: 0 6px; }
+.logo-variant-swatch.wide img { width: 100%; height: 100%; }
 .logo-variant-swatch.bg-on-white { background: #ffffff; }
-.logo-variant-swatch.bg-on-black { background: #282929; }
-.logo-variant-swatch.bg-on-red { background: #f54949; }
+.logo-variant-swatch.bg-on-black { background: #000000; }
+.logo-variant-swatch.bg-on-red { background: #ff002c; }
 .logo-variant-swatch.bg-triangle {
   background: repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%) 50% / 12px 12px;
 }
@@ -466,7 +453,7 @@ select {
 .toggle-row.wrap { flex-wrap: wrap; }
 .toggle-row.wrap button { flex: 1 0 30%; }
 
-/* galería de stickers ya hechos (¿Quieres militar?, etc.) */
+/* galería de stickers ya hechos (Huelga General 11N, etc.) */
 .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
 .gallery-item {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -487,13 +474,6 @@ select {
 .home.hidden { display: none; }
 .home-inner { max-width: 640px; margin: 0 auto; }
 .home h1 { font-size: 26px; margin: 8px 0 16px; line-height: 1.15; }
-.home-brands { display: flex; gap: 8px; margin-bottom: 16px; }
-.home-brand {
-  flex: 1; min-height: 48px; border-radius: var(--radius); cursor: pointer;
-  background: var(--panel-light); color: var(--text); border: 2px solid var(--border);
-  font-weight: 700; font-size: 16px; font-family: inherit;
-}
-.home-brand.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .home-continue {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
   min-height: 56px; padding: 10px 14px; margin-bottom: 14px; cursor: pointer;
@@ -530,7 +510,6 @@ select {
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
 
 /* navegación por niveles del inicio */
-.home-brands { margin-top: 8px; }
 .home-back {
   min-height: 44px; padding: 0 14px 0 6px; margin: 0 0 4px; cursor: pointer;
   background: transparent; color: var(--text); border: none; font-family: inherit; font-size: 16px; font-weight: 600;

@@ -1,12 +1,12 @@
 import { getLayer, updateLayer, removeLayer, getState } from '../engine/state.js';
 import { ARTICLE_SUBTITLE_GAP } from '../templates/builtins.js';
-import { COLORS, ASPECT_PRESETS, CANVAS_W, CANVAS_H, FONT_WIDTH_VARIANTS, FONT_WEIGHT_VARIANTS } from '../engine/constants.js';
-import { currentFontSet, brandColors, FONT_SETS, getFontSetKey } from '../engine/fontSets.js';
+import { COLORS, ASPECT_PRESETS, CANVAS_W, CANVAS_H } from '../engine/constants.js';
+import { FONT_SET, brandColors } from '../engine/fontSets.js';
 import { recolorThumb } from '../lib/recolor.js';
-import { submitText } from '../lib/community.js';
 import { swatches } from './swatches.js';
 import { icon } from './icons.js';
 import { AJT_LOGO_VARIANTS, AJT_LOGO_LAYOUTS, ajtColor } from '../templates/ajtLogo.js';
+import { VILLALBA_LOGO_VARIANTS, villalbaSrc, villalbaOptions, villalbaVariant, backgroundColor } from '../templates/villalbaLogo.js';
 import { LOGO_KINDS, logoKindOf, logoSrcFor, PIN_VARIANTS } from '../engine/stageRenderer.js';
 
 function row(labelText, inputEl) {
@@ -33,6 +33,32 @@ function rangeWithNumber(min, max, step, value, onChange) {
   wrap.appendChild(range);
   wrap.appendChild(num);
   return wrap;
+}
+
+// Fondo (pastilla) de los stickers: sin fondo o un color de marca. Reacciona
+// en pointerdown: que funcione al primer toque aunque el teclado esté abierto.
+function pillChoices(pill, onPick) {
+  const wrap = document.createElement('div');
+  wrap.className = 'toggle-row wrap';
+  const current = pill.visible === false ? null : (pill.color || '').toLowerCase();
+  [{ label: 'Sin fondo', hex: null }, ...brandColors()].forEach(({ label, hex }) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    if (current === hex) b.classList.add('active');
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      onPick(hex ? { visible: true, color: hex } : { visible: false });
+    });
+    wrap.appendChild(b);
+  });
+  return wrap;
+}
+
+// Redondeo de las esquinas de una pastilla, en % (100 = extremos redondos)
+function pillCornersRow(roundness, onValue) {
+  return row('Esquinas', rangeWithNumber(0, 100, 1, Math.round((roundness ?? 0.35) * 100), (v) => onValue(v / 100)));
 }
 
 // Panel único para los generadores rápidos (ubicación / foto+ubicación):
@@ -77,6 +103,16 @@ export function renderQuickPanel(container, { onChange } = {}) {
     onPick: (hex) => { patchText({ color: hex }); renderQuickPanel(container, { onChange }); },
   });
   g.appendChild(row('Color', quickColors));
+
+  const pill = state.layers.find((l) => l.type === 'pill');
+  if (pill) {
+    g.appendChild(row('Fondo', pillChoices(pill, (p) => {
+      updateLayer(pill.id, p);
+      onChange && onChange();
+      renderQuickPanel(container, { onChange });
+    })));
+    if (pill.visible !== false) g.appendChild(pillCornersRow(pill.roundness, (v) => { updateLayer(pill.id, { roundness: v }); onChange && onChange(); }));
+  }
 
   if (mode === 'photoLocation' && pin) {
     const cornerGrid = document.createElement('div');
@@ -222,6 +258,16 @@ export function renderAjtLogoPanel(container, { logo, onChange, onDownload, onDo
   };
   g.appendChild(row('Composición', options(AJT_LOGO_LAYOUTS, logo.ajtLayout, 'ajtLayout')));
   g.appendChild(row('Colores', options(AJT_LOGO_VARIANTS, logo.ajtVariant, 'ajtVariant', true)));
+  // pastilla detrás del logo (del color de fondo de la combinación elegida)
+  const pillOptions = [{ key: false, label: 'Sin fondo' }, { key: true, label: 'Pastilla' }];
+  g.appendChild(row('Fondo', options(pillOptions, !!logo.ajtPill, 'ajtPill')));
+  if (logo.ajtPill) g.appendChild(pillCornersRow(logo.ajtRound, (v) => onChange({ ajtRound: v })));
+  const bgHint = document.createElement('p');
+  bgHint.className = 'hint';
+  bgHint.textContent = logo.ajtPill
+    ? 'La pastilla toma el color de fondo de la combinación elegida.'
+    : 'Sin fondo: el PNG sale transparente; el color de detrás es solo para verlo aquí.';
+  g.appendChild(bgHint);
 
   const dl = document.createElement('button');
   dl.type = 'button';
@@ -240,7 +286,7 @@ export function renderAjtLogoPanel(container, { logo, onChange, onDownload, onDo
   container.appendChild(g);
 }
 
-export function renderProps(container, layerId, { onChange, onRemove, onBrandChange } = {}) {
+export function renderProps(container, layerId, { onChange, onRemove } = {}) {
   container.innerHTML = '';
   if (!layerId) {
     const p = document.createElement('p');
@@ -296,7 +342,9 @@ export function renderProps(container, layerId, { onChange, onRemove, onBrandCha
     } else if (layer.locked) {
       const note = document.createElement('p');
       note.className = 'hint';
-      note.textContent = 'Se genera automáticamente a partir del contenido: sin controles de posición ni tamaño.';
+      note.textContent = topQuickMode
+        ? 'Se genera automáticamente a partir del contenido: sin controles de posición ni tamaño.'
+        : 'Fija en su sitio: no se mueve ni cambia de tamaño.';
       gTransform.appendChild(note);
     } else {
       gTransform.appendChild(row('X', rangeWithNumber(-200, CANVAS_W_ + 200, 1, layer.x, (v) => patch({ x: v }))));
@@ -399,47 +447,6 @@ export function renderProps(container, layerId, { onChange, onRemove, onBrandCha
     textarea.addEventListener('input', () => patch({ text: textarea.value }));
     g.appendChild(row('Contenido', textarea));
 
-    const addCommunityBtn = document.createElement('button');
-    addCommunityBtn.type = 'button';
-    addCommunityBtn.className = 'btn small';
-    addCommunityBtn.style.cssText = 'width:100%;margin-bottom:10px';
-    addCommunityBtn.textContent = 'Añadir a la comunidad';
-    addCommunityBtn.addEventListener('click', async () => {
-      const current = getLayer(layerId);
-      if (!current || !current.text || !current.text.trim()) return;
-      addCommunityBtn.disabled = true;
-      try {
-        await submitText(current.text);
-        alert('Añadido a la comunidad: ya lo puede usar todo el mundo.');
-      } catch (err) {
-        console.error('Error añadiendo texto a la comunidad', err);
-        alert('No se ha podido añadir. Comprueba tu conexión e inténtalo de nuevo.');
-      } finally {
-        addCommunityBtn.disabled = false;
-      }
-    });
-    g.appendChild(addCommunityBtn);
-
-    // Texto de la comunidad: se puede abrir con cualquier marca y aquí se
-    // elige con qué tipografía se dibuja (puede no ser con la que se creó).
-    if (getState().community && onBrandChange) {
-      const brandHint = document.createElement('p');
-      brandHint.className = 'hint';
-      brandHint.textContent = 'Tipografía: con qué marca se dibuja este texto.';
-      g.appendChild(brandHint);
-      const brandRow = document.createElement('div');
-      brandRow.className = 'toggle-row';
-      Object.values(FONT_SETS).forEach((set) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = set.label;
-        if (set.key === getFontSetKey()) b.classList.add('active');
-        b.addEventListener('click', () => onBrandChange(set.key));
-        brandRow.appendChild(b);
-      });
-      g.appendChild(brandRow);
-    }
-
     // Artículo: interruptor del subtítulo, visible tanto desde el título
     // principal como desde el propio subtítulo
     if (layer.slot === 'mainTitle' || layer.slot === 'subtitle') {
@@ -463,7 +470,7 @@ export function renderProps(container, layerId, { onChange, onRemove, onBrandCha
       }
     }
 
-    if (isBodySticker || (isGeneralEditor && layer.role === 'body')) {
+    if (isBodySticker || isTitleSticker || isGeneralEditor) {
       const boldHint = document.createElement('p');
       boldHint.className = 'hint';
       boldHint.textContent = 'Truco: selecciona una parte del texto de arriba y pulsa "Negrita (selección)" para resaltar solo esas palabras.';
@@ -509,12 +516,10 @@ export function renderProps(container, layerId, { onChange, onRemove, onBrandCha
       g.appendChild(roleToggle);
     }
 
-    // Libertad de estilo (ancho + peso + cursiva) de Acumin Variable: en el
-    // sticker de título y en el de cuerpo, igual que en el editor general
-    // cuando el rol es cuerpo. El de ubicación mantiene siempre la
-    // tipografía de marca (ExtraCondensed Black Itálica) a propósito.
-    // OES y AJT ofrecen sus cortes también en los títulos de las plantillas
-    if (isTitleSticker || isBodySticker || (isGeneralEditor && (layer.role === 'body' || currentFontSet().styles))) {
+    // Libertad de estilo (corte + cursiva): en los stickers de título y de
+    // cuerpo y en el editor general. El de ubicación mantiene siempre la
+    // tipografía de marca (Thunder cursiva) a propósito.
+    if (isTitleSticker || isBodySticker || isGeneralEditor) {
       const styleToggle = document.createElement('div');
       styleToggle.className = 'toggle-row';
       const italicBtn = document.createElement('button');
@@ -524,73 +529,22 @@ export function renderProps(container, layerId, { onChange, onRemove, onBrandCha
       styleToggle.appendChild(italicBtn);
       g.appendChild(styleToggle);
 
-      const fontSet = currentFontSet();
-      if (fontSet.styles) {
-        // OES / AJT: solo tienen dos cortes (no hay ancho ni 9 pesos)
-        const styleLabel = document.createElement('p');
-        styleLabel.className = 'hint';
-        styleLabel.textContent = `Tipo de letra (${fontSet.detail}):`;
-        g.appendChild(styleLabel);
-        const styleRow = document.createElement('div');
-        styleRow.className = 'toggle-row wrap';
-        const curWeight = layer.weight || (layer.role === 'title' ? 800 : (layer.bold ? 700 : 400));
-        const curWidth = layer.widthVariant || (layer.role === 'title' ? 'extracondensed' : 'normal');
-        fontSet.styles.forEach((style) => {
-          // la inicial en otra fuente solo tiene sentido en títulos
-          if (style.titleOnly && !(isTitleSticker || layer.role === 'title')) return;
-          const b = document.createElement('button');
-          b.textContent = style.label;
-          if (style.isActive(layer, curWeight, curWidth)) b.classList.add('active');
-          b.addEventListener('click', () => { patch(style.patch); renderProps(container, layerId, { onChange, onRemove }); });
-          styleRow.appendChild(b);
-        });
-        g.appendChild(styleRow);
-      } else {
-        const widthLabel = document.createElement('p');
-        widthLabel.className = 'hint';
-        widthLabel.textContent = 'Ancho de letra:';
-        g.appendChild(widthLabel);
-        const widthRow = document.createElement('div');
-        widthRow.className = 'toggle-row wrap';
-        FONT_WIDTH_VARIANTS.forEach((variant) => {
-          const b2 = document.createElement('button');
-          b2.textContent = variant.label;
-          if ((layer.widthVariant || (isTitleSticker ? 'extracondensed' : 'normal')) === variant.key) b2.classList.add('active');
-          b2.addEventListener('click', () => { patch({ widthVariant: variant.key }); renderProps(container, layerId, { onChange, onRemove }); });
-          widthRow.appendChild(b2);
-        });
-        g.appendChild(widthRow);
-
-        const weightLabel = document.createElement('p');
-        weightLabel.className = 'hint';
-        weightLabel.textContent = 'Peso de letra:';
-        g.appendChild(weightLabel);
-        const weightRow = document.createElement('div');
-        weightRow.className = 'toggle-row wrap';
-        const currentWeight = layer.weight || (isTitleSticker ? 800 : (layer.bold ? 700 : 400));
-        FONT_WEIGHT_VARIANTS.forEach((variant) => {
-          const b3 = document.createElement('button');
-          b3.textContent = variant.label;
-          if (currentWeight === variant.weight) b3.classList.add('active');
-          b3.addEventListener('click', () => {
-            // guardamos el peso explícito y, para compatibilidad con el resto
-            // del motor (que usa "bold" para cuerpo normal), sincronizamos bold
-            patch({ weight: variant.weight, bold: variant.weight >= 700 });
-            renderProps(container, layerId, { onChange, onRemove });
-          });
-          weightRow.appendChild(b3);
-        });
-        g.appendChild(weightRow);
-      }
-    } else if (isGeneralEditor) {
-      const styleToggle = document.createElement('div');
-      styleToggle.className = 'toggle-row';
-      const italicBtn = document.createElement('button');
-      italicBtn.textContent = layer.italic ? 'Cursiva ✓' : 'Cursiva';
-      if (layer.italic) italicBtn.classList.add('active');
-      italicBtn.addEventListener('click', () => { patch({ italic: !(getLayer(layerId) || layer).italic }); renderProps(container, layerId, { onChange, onRemove }); });
-      styleToggle.appendChild(italicBtn);
-      g.appendChild(styleToggle);
+      const styleLabel = document.createElement('p');
+      styleLabel.className = 'hint';
+      styleLabel.textContent = `Tipo de letra (${FONT_SET.detail}):`;
+      g.appendChild(styleLabel);
+      const styleRow = document.createElement('div');
+      styleRow.className = 'toggle-row wrap';
+      const curWeight = layer.weight || (layer.role === 'title' ? 800 : (layer.bold ? 700 : 400));
+      const curWidth = layer.widthVariant || (layer.role === 'title' ? 'extracondensed' : 'normal');
+      FONT_SET.styles.forEach((style) => {
+        const b = document.createElement('button');
+        b.textContent = style.label;
+        if (style.isActive(layer, curWeight, curWidth)) b.classList.add('active');
+        b.addEventListener('click', () => { patch(style.patch); renderProps(container, layerId, { onChange, onRemove }); });
+        styleRow.appendChild(b);
+      });
+      g.appendChild(styleRow);
     }
 
     // alineación del párrafo (cuerpo del sticker y del editor general)
@@ -658,35 +612,39 @@ export function renderProps(container, layerId, { onChange, onRemove, onBrandCha
       gp.className = 'prop-group';
       gp.innerHTML = '<strong>Fondo (pastilla)</strong>';
       const patchPill = (p) => { updateLayer(pill.id, p); onChange && onChange(); };
-      const pillColors = document.createElement('div');
-      pillColors.className = 'toggle-row';
-      const currentPill = (pill.color || '').toLowerCase();
-      brandColors().map((c) => [c.label, c.hex]).forEach(([label, hex]) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = label;
-        if (currentPill === hex.toLowerCase()) b.classList.add('active');
-        // pointerdown: que funcione al primer toque aunque el teclado esté abierto
-        b.addEventListener('pointerdown', (e) => {
-          e.preventDefault();
-          if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-          patchPill({ color: hex });
-          renderProps(container, layerId, { onChange, onRemove });
-        });
-        pillColors.appendChild(b);
-      });
-      gp.appendChild(row('Color', pillColors));
-      gp.appendChild(row('Esquinas', rangeWithNumber(0, 200, 1, pill.cornerRadius || 0, (v) => patchPill({ cornerRadius: v }))));
-      gp.appendChild(row('Margen', rangeWithNumber(0, 120, 1, pill.padding || 0, (v) => patchPill({ padding: v }))));
-      const pillHint = document.createElement('p');
-      pillHint.className = 'hint';
-      pillHint.textContent = 'La pastila se ajusta sola al texto. Esquinas al máximo = extremos totalmente redondos.';
-      gp.appendChild(pillHint);
+      gp.appendChild(row('Color', pillChoices(pill, (p) => { patchPill(p); renderProps(container, layerId, { onChange, onRemove }); })));
+      if (pill.visible !== false) {
+        gp.appendChild(pillCornersRow(pill.roundness, (v) => patchPill({ roundness: v })));
+        // margen a mano solo en el cuerpo; en título y fecha va en proporción a la letra
+        if (isBodySticker) gp.appendChild(row('Margen', rangeWithNumber(0, 120, 1, pill.padding || 0, (v) => patchPill({ padding: v }))));
+        const pillHint = document.createElement('p');
+        pillHint.className = 'hint';
+        pillHint.textContent = 'La pastilla se ajusta sola al texto. Esquinas al 100 = extremos totalmente redondos.';
+        gp.appendChild(pillHint);
+      }
       container.appendChild(gp);
     }
   }
 
-  if (layer.type === 'image') {
+  // imagen fija con versiones a elegir (cabecera del Diario Socialista: blanca o negra)
+  if (layer.type === 'image' && layer.choices) {
+    const g = document.createElement('div');
+    g.className = 'prop-group';
+    g.innerHTML = '<strong>Color</strong>';
+    const choiceRow = document.createElement('div');
+    choiceRow.className = 'toggle-row';
+    layer.choices.forEach((choice) => {
+      const b = document.createElement('button');
+      b.textContent = choice.label;
+      if (layer.src === choice.src) b.classList.add('active');
+      b.addEventListener('click', () => { patch({ src: choice.src }); renderProps(container, layerId, { onChange, onRemove }); });
+      choiceRow.appendChild(b);
+    });
+    g.appendChild(choiceRow);
+    container.appendChild(g);
+  }
+
+  if (layer.type === 'image' && !layer.choices) {
     const g = document.createElement('div');
     g.className = 'prop-group';
     g.innerHTML = '<strong>Imagen</strong>';
@@ -704,7 +662,49 @@ export function renderProps(container, layerId, { onChange, onRemove, onBrandCha
     container.appendChild(g);
   }
 
-  if (layer.type === 'logo') {
+  // logo de Villalba: en el Artículo es fijo y la versión sigue al fondo (se
+  // elige solo si el fondo admite dos); en el repost se elige libremente
+  if (layer.villalba) {
+    const g = document.createElement('div');
+    g.className = 'prop-group';
+    g.innerHTML = '<strong>Logo de Villalba</strong>';
+    const layers = getState().layers;
+    const bg = backgroundColor(layers) || '#ffffff';
+    const options = villalbaOptions(layer, layers);
+    const current = villalbaVariant(layer, layers);
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    if (layer.villalbaFree) hint.textContent = 'Elige la versión que mejor se vea sobre el fondo:';
+    else if (options.length > 1) hint.textContent = 'Va fijo abajo y centrado. Con este fondo puedes elegir entre dos versiones:';
+    else hint.textContent = 'Va fijo abajo y centrado. Con este fondo va siempre esta versión; con fondo rojo o negro podrás elegir entre dos.';
+    g.appendChild(hint);
+    const grid = document.createElement('div');
+    grid.className = 'logo-variant-grid';
+    options.forEach((key) => {
+      const variant = VILLALBA_LOGO_VARIANTS[key];
+      const b = document.createElement('button');
+      b.className = 'logo-variant-btn';
+      if (key === current) b.classList.add('active');
+      const swatch = document.createElement('span');
+      swatch.className = 'logo-variant-swatch wide';
+      swatch.style.background = layer.villalbaFree ? (variant.light ? '#ffffff' : '#000000') : bg;
+      const img = document.createElement('img');
+      img.src = villalbaSrc(key, layer.villalbaLayout);
+      img.alt = variant.label;
+      swatch.appendChild(img);
+      const label = document.createElement('span');
+      label.className = 'logo-variant-label';
+      label.textContent = variant.label;
+      b.appendChild(swatch);
+      b.appendChild(label);
+      b.addEventListener('click', () => { patch({ villalbaVariant: key }); renderProps(container, layerId, { onChange, onRemove }); });
+      grid.appendChild(b);
+    });
+    g.appendChild(grid);
+    container.appendChild(g);
+  }
+
+  if (layer.type === 'logo' && !layer.villalba) {
     const g = document.createElement('div');
     g.className = 'prop-group';
     g.innerHTML = '<strong>Logo</strong>';
@@ -857,6 +857,12 @@ export function renderProps(container, layerId, { onChange, onRemove, onBrandCha
     });
     g.appendChild(quickColors);
     g.appendChild(row('Color', colorInput));
+    if (isBackground && getState().layers.some((l) => l.villalba)) {
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.textContent = 'El logo de Villalba cambia solo según este color. Con fondo rojo o negro, tócalo para elegir entre sus dos versiones.';
+      g.appendChild(hint);
+    }
     container.appendChild(g);
   }
 
@@ -925,15 +931,16 @@ export function renderProps(container, layerId, { onChange, onRemove, onBrandCha
   // primero que se quiere tocar al diseñar. En el sticker de título no
   // aplican (lienzo fijo al contenido, una sola capa): se omiten del todo.
   // título y cuerpo de sticker: lienzo ajustado al contenido, sin posición
-  if (topQuickMode !== 'title' && topQuickMode !== 'body') {
+  // capas obligatorias (logo de Villalba): sin mover, sin quitar del PNG y sin borrar
+  if (topQuickMode !== 'title' && topQuickMode !== 'body' && !layer.required) {
     container.appendChild(buildTransformGroup());
   }
-  if (!topQuickMode && !isFrame) { // el marco nunca se exporta: sin opción
+  if (!topQuickMode && !isFrame && !layer.required) { // el marco nunca se exporta: sin opción
     container.appendChild(buildExportGroup());
   }
 
   // ---- borrar capa (no aplica a los generadores rápidos: es la única capa) ----
-  if (!topQuickMode) {
+  if (!topQuickMode && !layer.required) {
     const del = document.createElement('button');
     del.className = 'btn small';
     del.style.width = '100%';

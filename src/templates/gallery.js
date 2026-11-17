@@ -5,41 +5,8 @@ import { makeImageLayer } from '../engine/layerFactory.js';
 // dejar el PNG en assets/stickers/<galería>/ y añadir aquí una línea con su
 // tamaño real en píxeles.
 export const GALLERIES = {
-  militar: {
-    title: '¿Quieres militar?',
-    zipName: 'stickers_quieres_militar.zip',
-    items: [
-      { key: 'corto', label: 'Versión corta', src: './assets/stickers/militar/quieres-militar-corto.png', width: 589, height: 937 },
-      { key: 'largo', label: 'Versión larga', src: './assets/stickers/militar/quieres-militar-largo.png', width: 589, height: 1229 },
-    ],
-  },
-  logosCjs: {
-    title: 'Logotipo CJS',
-    zipName: 'logotipo_cjs.zip',
-    items: [
-      { key: 'icono-blanco', label: 'Icono · blanco', src: './assets/logos/cjs/cjs-icono-blanco.png', width: 392, height: 391 },
-      { key: 'icono-negro', label: 'Icono · negro claro', src: './assets/logos/cjs/cjs-icono-negro.png', width: 392, height: 391, lightPreview: true },
-      { key: 'icono-rojo', label: 'Icono · rojo', src: './assets/logos/cjs/cjs-icono-rojo.png', width: 392, height: 391 },
-      { key: 'icono-blanco-triangulo-rojo', label: 'Icono · blanco, triángulo rojo', src: './assets/logos/cjs/cjs-icono-blanco-triangulo-rojo.png', width: 392, height: 391 },
-      { key: 'icono-negro-triangulo-rojo', label: 'Icono · negro claro, triángulo rojo', src: './assets/logos/cjs/cjs-icono-negro-triangulo-rojo.png', width: 392, height: 391, lightPreview: true },
-      { key: 'blanco', label: 'Todo blanco', src: './assets/logos/cjs/cjs-blanco.png', width: 1380, height: 392 },
-      { key: 'negro', label: 'Negro claro', src: './assets/logos/cjs/cjs-negro.png', width: 1380, height: 392, lightPreview: true },
-      { key: 'rojo', label: 'Todo rojo', src: './assets/logos/cjs/cjs-rojo.png', width: 1380, height: 392 },
-      { key: 'blanco-triangulo-rojo', label: 'Blanco · triángulo rojo', src: './assets/logos/cjs/cjs-blanco-triangulo-rojo.png', width: 1380, height: 392 },
-      { key: 'negro-triangulo-rojo', label: 'Negro claro · triángulo rojo', src: './assets/logos/cjs/cjs-negro-triangulo-rojo.png', width: 1380, height: 392, lightPreview: true },
-    ],
-  },
-  logosOes: {
-    title: 'Logotipo OES',
-    zipName: 'logotipo_oes.zip',
-    items: [
-      { key: 'rojo', label: 'Rojo', src: './assets/logos/oes/oes-rojo.png', width: 1996, height: 880 },
-      { key: 'blanco', label: 'Blanco', src: './assets/logos/oes/oes-blanco.png', width: 1996, height: 880 },
-      { key: 'negro', label: 'Negro', src: './assets/logos/oes/oes-negro.png', width: 1996, height: 880, lightPreview: true },
-    ],
-  },
   // recolor: true = sticker de un solo color que se puede descargar en los
-  // colores de cada marca (ver lib/recolor.js)
+  // colores de AJT (ver lib/recolor.js)
   huelga11n: {
     title: 'Stickers Huelga General 11N',
     zipName: 'stickers_huelga_general_11n.zip',
@@ -53,16 +20,7 @@ export const GALLERIES = {
   },
 };
 
-// Items de la comunidad: no viven en GALLERIES (fijo, en el código) sino que
-// llegan por red; se registran aquí en tiempo de ejecución para poder
-// reutilizar el mismo pipeline de galería (recoloreado, panel, descarga).
-const communityRuntime = new Map();
-export function registerCommunityItem(item) {
-  communityRuntime.set(item.key, item);
-}
-
 export function galleryItem(galleryKey, itemKey) {
-  if (galleryKey === 'community') return communityRuntime.get(itemKey) || null;
   const g = GALLERIES[galleryKey];
   if (!g) return null;
   return g.items.find((i) => i.key === itemKey) || g.items[0];
@@ -97,7 +55,7 @@ export function galleryFileName(item) {
   return item.src.split('/').pop();
 }
 
-// nombre de archivo al descargar en un color de marca: huelga-general-ff4331.png
+// nombre de archivo al descargar en un color de marca: huelga-general-ff002c.png
 export function galleryColorFileName(item, hex) {
   const base = galleryFileName(item);
   return hex ? base.replace(/\.png$/i, `-${hex.replace('#', '')}.png`) : base;

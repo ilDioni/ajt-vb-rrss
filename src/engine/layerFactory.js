@@ -18,9 +18,8 @@ export function makeTextLayer({
   exportable = true,
   locked = false,
   letterSpacing = 0,
-  widthVariant = null, // null = usar el valor por defecto según el rol (ver computeFont); si no, ver FONT_WIDTH_VARIANTS
+  widthVariant = null, // null = usar el valor por defecto según el rol (ver computeFont); si no, una clave de FONT_SET.families
   weight = null, // null = usar el peso por defecto según el rol/negrita
-  initialFont = null, // título destacado: primera letra en otra fuente del juego activo (ver fontSets.js)
   slot = null, // papel fijo dentro de una plantilla (p.ej. 'mainTitle' / 'subtitle' del artículo)
 } = {}) {
   return {
@@ -43,7 +42,6 @@ export function makeTextLayer({
     letterSpacing,
     widthVariant,
     weight,
-    initialFont,
     slot,
   };
 }
