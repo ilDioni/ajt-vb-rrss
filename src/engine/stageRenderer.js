@@ -301,9 +301,11 @@ export class StageRenderer {
     const W = canvas.width, H = canvas.height;
     const data = canvas.getContext('2d').getImageData(0, 0, W, H).data;
     let minX = W, minY = H, maxX = -1, maxY = -1;
+    let inked = 0;
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         if (data[(y * W + x) * 4 + 3] > 40) {
+          inked++;
           if (x < minX) minX = x;
           if (x > maxX) maxX = x;
           if (y < minY) minY = y;
@@ -311,7 +313,12 @@ export class StageRenderer {
         }
       }
     }
-    const ink = maxX < 0 ? null : {
+    // un texto nunca cubre casi toda su caja: si lo parece, el navegador ha
+    // alterado la lectura de píxeles (protección contra el rastreo) y se usa la caja
+    const unreliable = inked > W * H * 0.9;
+    const ink = maxX < 0 ? null : unreliable ? {
+      minX: box.x, minY: box.y, maxX: box.x + box.width, maxY: box.y + box.height,
+    } : {
       minX: box.x + minX / ratio, minY: box.y + minY / ratio,
       maxX: box.x + (maxX + 1) / ratio, maxY: box.y + (maxY + 1) / ratio,
     };
@@ -504,7 +511,13 @@ export class StageRenderer {
       name: 'img', visible: !!img,
       sceneFunc: drawSmoothImage,
     });
-    group.add(placeholder, label, image);
+    // brillo: "darken" (0–1) oscurece la foto con una capa negra encima
+    const shade = new window.Konva.Rect({
+      width: d.width, height: d.height, cornerRadius: d.cornerRadius || 0,
+      fill: '#000000', opacity: d.darken || 0, name: 'shade', listening: false,
+      visible: !!img && (d.darken || 0) > 0,
+    });
+    group.add(placeholder, label, image, shade);
     group.setAttr('_src', this.imageKey(d));
     if (img) this.applyCover(image, img, d);
     return group;
@@ -521,6 +534,8 @@ export class StageRenderer {
     label.size({ width: d.width, height: d.height });
     image.size({ width: d.width, height: d.height });
     image.cornerRadius(d.cornerRadius || 0);
+    const shade = group.findOne('.shade');
+    shade.setAttrs({ width: d.width, height: d.height, cornerRadius: d.cornerRadius || 0, opacity: d.darken || 0 });
 
     if (group.getAttr('_src') !== this.imageKey(d)) {
       const img = await this.loadImageFor(d);
@@ -530,9 +545,11 @@ export class StageRenderer {
       placeholder.visible(!has);
       label.visible(!has);
       image.visible(has);
+      shade.visible(has && (d.darken || 0) > 0);
       if (img) this.applyCover(image, img, d);
     } else if (image.image()) {
       this.applyCover(image, image.image(), d);
+      shade.visible((d.darken || 0) > 0);
     }
   }
   applyCover(node, img, d) {

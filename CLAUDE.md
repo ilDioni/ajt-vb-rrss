@@ -37,6 +37,12 @@ https://ildioni.github.io/ajt-vb-rrss/. Actualizar = commit + `git push` **solo 
   esos textos se dibujan por "runs" como el cuerpo. Si la familia no tiene un corte más grueso (Thunder,
   Black Condensed, PP Playground o ya en Bold) la negrita se simula con un trazo fino del mismo color.
 - Logo de la pantalla de inicio: AJT Villalba compacto, original blanco.
+- Foto de fondo del Diario Socialista: «Brillo» (campo `darken` de la capa = capa negra encima con
+  opacidad); el control sale en las capas de imagen que traen `darken`.
+- La medida de la tinta de los rótulos (`measureInkRatios`) y de la pastilla (`inkBounds`) lee píxeles del
+  lienzo. Algunos navegadores/extensiones contra el rastreo alteran esa lectura (ruido o todo opaco): por
+  eso hay umbral alto y plan B con métricas de texto. Síntoma si falla: ubicación/título con la letra 2,6
+  veces más pequeña y desplazada hacia abajo.
 - La sección «Comunidad» (Supabase) se quitó a propósito (2026-11-17): la app ya no usa ningún backend.
 - Interfaz sencilla: paneles únicos, sin controles redundantes, sin emojis ni degradados («plana de taller»).
 - Si dice que va lento: comprobar primero que se reinició el servidor y se recargó la página.

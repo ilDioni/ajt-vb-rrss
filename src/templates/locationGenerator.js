@@ -104,21 +104,37 @@ function measureInkRatios({ text, family, weight, italic, letterSpacingRatio }) 
   const raw = canvas._canvas;
   const W = raw.width, H = raw.height;
   const data = raw.getContext('2d').getImageData(0, 0, W, H).data;
+  // el texto es blanco opaco: cuenta como tinta lo que está al menos medio opaco
   const rowHasInk = (y) => {
-    for (let i = y * W * 4 + 3, end = i + W * 4; i < end; i += 4) if (data[i] > 10) return true;
+    for (let i = y * W * 4 + 3, end = i + W * 4; i < end; i += 4) if (data[i] > 128) return true;
     return false;
   };
   let inkTop = null;
   for (let y = 0; y < H; y++) if (rowHasInk(y)) { inkTop = y; break; }
-  let result;
-  if (inkTop === null) {
-    result = { inkOffsetY: 0.1, capHeight: 0.72 };
-  } else {
+  let result = null;
+  if (inkTop !== null) {
     let inkBottom = inkTop;
     for (let y = H - 1; y > inkTop; y--) if (rowHasInk(y)) { inkBottom = y; break; }
+    // Hay medio cuerpo de margen alrededor: la tinta nunca llega a los bordes.
+    // Si llega, el navegador ha alterado la lectura de píxeles (algunas
+    // protecciones contra el rastreo y extensiones lo hacen) y la medida no
+    // vale: salía la letra 2,6 veces más pequeña y desplazada hacia abajo.
+    if (inkTop > 0 && inkBottom < H - 1) {
+      result = {
+        inkOffsetY: (inkTop / ratio - pad) / fontSize,
+        capHeight: ((inkBottom - inkTop + 1) / ratio) / fontSize,
+      };
+    }
+  }
+  if (!result) {
+    // Plan B sin leer píxeles: métricas del propio texto, con la misma línea
+    // base ('middle', a media altura de línea) con la que Konva lo dibuja
+    ctx.textBaseline = 'middle';
+    const m = ctx.measureText(text);
+    ctx.textBaseline = 'alphabetic';
     result = {
-      inkOffsetY: (inkTop / ratio - pad) / fontSize,
-      capHeight: ((inkBottom - inkTop + 1) / ratio) / fontSize,
+      inkOffsetY: ((1.08 * fontSize) / 2 - m.actualBoundingBoxAscent) / fontSize,
+      capHeight: (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) / fontSize,
     };
   }
   if (inkCache.size > 300) inkCache.clear();

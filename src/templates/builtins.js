@@ -152,11 +152,12 @@ function diarioSocialista() {
   return {
     canvas: { width: CANVAS_W, height: CANVAS_H },
     templateName: 'Diario Socialista',
-    templateVersion: 3,
+    templateVersion: 4,
     layers: [
       {
         ...makeImageLayer({ name: 'Foto de fondo', x: 0, y: 0, width: CANVAS_W, height: CANVAS_H, fit: 'cover', locked: true }),
         placeholderText: '+ foto de fondo', placeholderAlign: 'bottom',
+        darken: 0, // con brillo ajustable (para oscurecer la foto)
       },
       {
         ...makeImageLayer({

@@ -656,6 +656,14 @@ export function renderProps(container, layerId, { onChange, onRemove } = {}) {
       window.dispatchEvent(evt);
     });
     g.appendChild(btn);
+    // brillo (solo en las capas que lo traen, p. ej. la foto de fondo del Diario Socialista)
+    if (layer.darken !== undefined) {
+      g.appendChild(row('Brillo', rangeWithNumber(0, 100, 1, Math.round((1 - layer.darken) * 100), (v) => patch({ darken: 1 - v / 100 }))));
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.textContent = 'Baja el brillo para oscurecer la foto y que se lean mejor los textos.';
+      g.appendChild(hint);
+    }
     if (!layer.locked) {
       g.appendChild(row('Radio esquina', rangeWithNumber(0, 200, 1, layer.cornerRadius || 0, (v) => patch({ cornerRadius: v }))));
     }
