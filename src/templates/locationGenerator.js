@@ -1,7 +1,7 @@
 import { COLORS } from '../engine/constants.js';
 import { makeTextLayer, makePinLayer, makeImageLayer, makePillLayer } from '../engine/layerFactory.js';
 import { getWidthVariant, titleFamily, FONT_SET, titleUppercase } from '../engine/fontSets.js';
-import { parseBoldSegments, stripBold, bodyWeights } from '../engine/richText.js';
+import { parseRich, stripMarkup, bodyWeights, layoutRichText } from '../engine/richText.js';
 
 // Proporciones medidas directamente sobre tus stickers reales
 // (D:\ICONOS DE UBICACIÓN\MURCIA.png, lienzo 4538x1813, contenido 969px de
@@ -145,21 +145,17 @@ function measureInkRatios({ text, family, weight, italic, letterSpacingRatio }) 
 // Ajusta el tamaño de fuente para que la altura real de la tinta sea targetH.
 // Una sola medición (cacheada) en vez de 5 renders por llamada.
 function fitFontSizeToCapHeight(text, targetH, family, weight, letterSpacingRatio = 0, italic = false) {
-  const plain = stripBold(text);
+  // la altura la marca la letra de la capa (sin las marcas de negrita, color o letra)
+  const plain = stripMarkup(text);
   const ink = measureInkRatios({ text: plain, family, weight, italic, letterSpacingRatio });
   const fontSize = ink.capHeight > 0 ? targetH / ink.capHeight : targetH;
   const letterSpacing = fontSize * letterSpacingRatio;
-  const ctx = getMeasureCtx();
-  // Chrome necesita la palabra "italic" explícita en el string para aplicar
-  // la inclinación del @font-face (el descriptor font-style:oblique del
-  // @font-face no basta por sí solo) — igual que en el motor de render.
-  // Con negrita parcial (**así**) cada trozo se mide con su peso.
+  // el ancho, como lo dibuja el motor: cada trozo con su letra y su peso
   const { bold } = bodyWeights({ role: 'title', weight });
-  let width = Math.max(0, [...plain].length - 1) * letterSpacing;
-  for (const seg of parseBoldSegments(text)) {
-    ctx.font = `${italic ? 'italic ' : ''}${seg.bold ? bold : weight} ${fontSize}px "${family}"`;
-    width += ctx.measureText(seg.text).width;
-  }
+  const { maxLineWidth: width } = layoutRichText({
+    text, box: { width: Infinity, height: Infinity }, fontFamily: family, fontFamilyItalic: family, italic,
+    normalWeight: weight, boldWeight: bold, fontSize, letterSpacing,
+  });
   return { fontSize, width, capHeight: targetH, letterSpacing, inkOffsetY: ink.inkOffsetY * fontSize };
 }
 
@@ -177,7 +173,9 @@ function widthVariantFamily(widthKey, italic) {
 export function computeTextTitleGeometry(textRaw, { H = 500, widthVariant = 'extracondensed', weight = 800, italic = true, keepCase = false } = {}) {
   const raw = (textRaw || 'TEXTO').trim() || 'TEXTO';
   const text = !keepCase && titleUppercase(widthVariant) ? raw.toUpperCase() : raw;
-  const pad = H * 0.35;
+  // con trozos en otra letra (más alta, o con rasgos largos como PP
+  // Playground) se deja más hueco arriba y abajo para que no se corten
+  const pad = H * (parseRich(text).some((s) => s.font) ? 0.7 : 0.35);
   const family = widthVariantFamily(widthVariant, italic);
   const lsRatio = widthVariant === 'extracondensed' ? titleTrackingRatio() : 0;
   const { fontSize, width: textWidth, letterSpacing, inkOffsetY } = fitFontSizeToCapHeight(text, H, family, weight, lsRatio, italic);

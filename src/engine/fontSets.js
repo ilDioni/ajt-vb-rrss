@@ -29,13 +29,14 @@ export const FONT_SET = {
     wide: 'AJT Helvetica Neue',
     playground: 'AJT PP Playground',
   },
-  // cortes que se ofrecen en el panel de texto
+  // cortes que se ofrecen en el panel de texto; tag: su marca para un trozo
+  // de texto ([thunder]así[/thunder], ver richText.js)
   styles: [
-    { key: 'roman', label: 'Roman', patch: { widthVariant: 'normal', weight: 400, bold: false }, isActive: (d, w, widthKey) => isNormalWidth(widthKey) && w < 600 },
-    { key: 'bold', label: 'Bold', patch: { widthVariant: 'normal', weight: 700, bold: true }, isActive: (d, w, widthKey) => isNormalWidth(widthKey) && w >= 600 },
-    { key: 'thunder', label: 'Thunder', patch: { widthVariant: 'extracondensed', weight: 800, bold: true }, isActive: (d, w, widthKey) => widthKey === 'extracondensed' },
-    { key: 'blackcn', label: 'Black Cond.', patch: { widthVariant: 'condensed', weight: 800, bold: true }, isActive: (d, w, widthKey) => widthKey === 'condensed' || widthKey === 'semicondensed' },
-    { key: 'playground', label: 'PP Playground', patch: { widthVariant: 'playground', weight: 500, bold: false }, isActive: (d, w, widthKey) => widthKey === 'playground' },
+    { key: 'roman', tag: 'roman', label: 'Roman', patch: { widthVariant: 'normal', weight: 400, bold: false }, isActive: (d, w, widthKey) => isNormalWidth(widthKey) && w < 600 },
+    { key: 'bold', tag: 'bold', label: 'Bold', patch: { widthVariant: 'normal', weight: 700, bold: true }, isActive: (d, w, widthKey) => isNormalWidth(widthKey) && w >= 600 },
+    { key: 'thunder', tag: 'thunder', label: 'Thunder', patch: { widthVariant: 'extracondensed', weight: 800, bold: true }, isActive: (d, w, widthKey) => widthKey === 'extracondensed' },
+    { key: 'blackcn', tag: 'black', label: 'Black Cond.', patch: { widthVariant: 'condensed', weight: 800, bold: true }, isActive: (d, w, widthKey) => widthKey === 'condensed' || widthKey === 'semicondensed' },
+    { key: 'playground', tag: 'playground', label: 'PP Playground', patch: { widthVariant: 'playground', weight: 500, bold: false }, isActive: (d, w, widthKey) => widthKey === 'playground' },
   ],
 };
 

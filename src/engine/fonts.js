@@ -1,4 +1,4 @@
-import { bodyWeights, hasBoldMarkers } from './richText.js';
+import { bodyWeights, hasMarkup, richFaces } from './richText.js';
 import { getWidthVariant, snapWeight, FONT_FILES } from './fontSets.js';
 
 // Las fuentes no se descargan todas al abrir la app: solo las que usa el
@@ -17,14 +17,13 @@ export function fontSpecsForState(state) {
     const isTitle = d.role === 'title';
     const family = familyFor(d.widthVariant || (isTitle ? 'extracondensed' : 'normal'));
     const style = d.italic ? 'italic ' : '';
-    if (isTitle) {
-      const { normal, bold } = bodyWeights(d);
-      specs.add(`${style}${snapWeight(family, normal)} 100px "${family}"`);
-      if (hasBoldMarkers(d.text)) specs.add(`${style}${snapWeight(family, bold)} 100px "${family}"`);
-    } else {
-      const { normal, bold } = bodyWeights(d); // base + negrita parcial (**así**)
-      specs.add(`${style}${snapWeight(family, normal)} 100px "${family}"`);
-      specs.add(`${style}${snapWeight(family, bold)} 100px "${family}"`);
+    const { normal, bold } = bodyWeights(d);
+    specs.add(`${style}${snapWeight(family, normal)} 100px "${family}"`);
+    // el cuerpo siempre lleva su negrita parcial preparada (**así**)
+    if (!isTitle) specs.add(`${style}${snapWeight(family, bold)} 100px "${family}"`);
+    // trozos con negrita, otra letra ([thunder]…) o color
+    if (hasMarkup(d.text)) {
+      richFaces(d.text, { family, normal, bold }).forEach((f) => specs.add(`${style}${snapWeight(f.family, f.weight)} 100px "${f.family}"`));
     }
   }
   return [...specs];

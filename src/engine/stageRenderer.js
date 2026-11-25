@@ -1,10 +1,12 @@
 import { getState, updateLayer, selectLayer, pushHistory } from './state.js';
 import { CANVAS_W, CANVAS_H, COLORS } from './constants.js';
-import { getWidthVariant, snapWeight } from './fontSets.js';
+import { getWidthVariant } from './fontSets.js';
 import { fitTextToBox } from './textFit.js';
-import { layoutRichText, fitRichText, bodyWeights, hasBoldMarkers } from './richText.js';
+import { layoutRichText, fitRichText, bodyWeights, hasMarkup } from './richText.js';
 import { ensureFontsFor } from './fonts.js';
 import { tintCanvas } from '../lib/recolor.js';
+import { shadowMetrics } from './shadow.js';
+import { gradientColorStops } from './gradient.js';
 import { villalbaSrc, villalbaVariant } from '../templates/villalbaLogo.js';
 
 const imageCache = new Map();
@@ -452,18 +454,24 @@ export class StageRenderer {
   applyShadow(node, d) {
     if (d.shadowOn === undefined && !node.getAttr('_shadowed')) return;
     const { width, height } = this.canvasSize();
-    const base = Math.min(width, height);
-    const blur = ((d.shadowBlurPct ?? 35) / 100) * base * 0.05;
-    const dist = ((d.shadowDistPct ?? 20) / 100) * base * 0.03;
+    // shadowBase: en los stickers el lienzo crece para que quepa la sombra, así
+    // que el tamaño de la sombra se mide sobre el contenido, no sobre el lienzo
+    const m = shadowMetrics(d, d.shadowBase || Math.min(width, height));
+    const on = !!d.shadowOn && !this.coveredByPill(d);
     const leaves = node.getType() === 'Shape' ? [node] : node.find((n) => n.getType() === 'Shape' && n.name() !== 'placeholder' && n.name() !== 'placeholderLabel');
     leaves.forEach((leaf) => {
-      if (d.shadowOn) {
-        leaf.setAttrs({ shadowEnabled: true, shadowColor: '#000000', shadowBlur: blur, shadowOpacity: d.shadowOpacity ?? 0.7, shadowOffsetX: 0, shadowOffsetY: dist });
+      if (on) {
+        leaf.setAttrs({ shadowEnabled: true, shadowColor: '#000000', shadowBlur: m.blur, shadowOpacity: m.opacity, shadowOffsetX: 0, shadowOffsetY: m.dist });
       } else {
         leaf.shadowEnabled(false);
       }
     });
-    node.setAttr('_shadowed', !!d.shadowOn);
+    node.setAttr('_shadowed', on);
+  }
+  // con la pastilla visible, la sombra la lleva ella (no el texto ni el pin de encima)
+  coveredByPill(d) {
+    if (d.type === 'pill') return false;
+    return getState().layers.some((p) => p.type === 'pill' && p.visible !== false && (p.targetId === d.id || (p.targetIds || []).includes(d.id)));
   }
 
   async updateNode(node, layerData) {
@@ -710,10 +718,10 @@ export class StageRenderer {
   }
 
   // el cuerpo se renderiza siempre como un grupo de "runs" (permite negrita parcial con **así**)
-  // El cuerpo se dibuja siempre por "runs" (negrita parcial con **así**); el
-  // título, solo cuando lleva esas marcas (si no, un Konva.Text simple)
+  // El cuerpo se dibuja siempre por "runs" (trozos con negrita, color o letra
+  // propios); el título, solo cuando lleva esas marcas (si no, un Konva.Text simple)
   isRunsText(d) {
-    return d.role !== 'title' || hasBoldMarkers(d.text);
+    return d.role !== 'title' || hasMarkup(d.text);
   }
   runsVariant(d) {
     return getWidthVariant(d.widthVariant || (d.role === 'title' ? 'extracondensed' : 'normal'));
@@ -736,23 +744,23 @@ export class StageRenderer {
       align: d.align || 'left',
       letterSpacing,
     });
-    // familias sin un corte más grueso (Thunder, Black Condensed, PP
-    // Playground, o ya en Bold): la negrita se simula con un trazo del mismo color
-    const fauxBold = snapWeight(variant.family, boldWeight) <= snapWeight(variant.family, normalWeight);
-    const fill = d.color || '#ffffff';
     group.destroyChildren();
     layout.runs.forEach((run) => {
       if (!run.text.trim() && !/\s/.test(run.text)) return;
+      // cada trozo con su color ([rojo]…) o el de la capa
+      const fill = run.color || d.color || '#ffffff';
       group.add(new window.Konva.Text({
-        x: run.x, y: run.y,
+        x: run.x, y: run.y + run.dy,
         text: run.text,
         fontSize,
         fontFamily: run.family,
-        fontStyle: `${d.italic ? 'italic ' : ''}${run.bold ? boldWeight : normalWeight}`,
+        fontStyle: `${d.italic ? 'italic ' : ''}${run.weight}`,
         fill,
         // mismo alto de línea que el título simple, para que no se mueva al poner marcas
         ...(isTitle ? { lineHeight: 1.08, letterSpacing } : {}),
-        ...(run.bold && fauxBold ? { stroke: fill, strokeWidth: fontSize * 0.018, lineJoin: 'round' } : {}),
+        // familias sin un corte más grueso (Thunder, Black Condensed, PP
+        // Playground, o ya en Bold): la negrita se simula con un trazo del mismo color
+        ...(run.fauxBold ? { stroke: fill, strokeWidth: fontSize * 0.018, lineJoin: 'round' } : {}),
       }));
     });
   }
@@ -854,10 +862,9 @@ export class StageRenderer {
     this.applyGradientFill(node, d);
   }
   applyGradientFill(node, d) {
-    const c = d.color || COLORS.black;
     node.fillLinearGradientStartPoint({ x: 0, y: 0 });
     node.fillLinearGradientEndPoint({ x: 0, y: d.height });
-    node.fillLinearGradientColorStops([0, hexToRgba(c, 0), 1, hexToRgba(c, 0.92)]);
+    node.fillLinearGradientColorStops(gradientColorStops(d, hexToRgba));
   }
 }
 

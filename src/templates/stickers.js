@@ -1,6 +1,7 @@
 import { buildGalleryDoc, GALLERIES } from './gallery.js';
 import { buildAjtLogoDoc } from './ajtLogo.js';
 import { buildComposeDoc } from './compose.js';
+import { buildGradientDoc } from './gradient.js';
 import { buildTextTitleDoc, buildTextBodyDoc, buildDateDoc, buildLocationStickerDoc, buildPhotoLocationDoc } from './locationGenerator.js';
 
 // Plantillas de arranque para los generadores rápidos. El contenido real se
@@ -32,4 +33,9 @@ export const HUELGA_TEMPLATES = GALLERIES.huelga11n.items.map((item) => ({
 // Sección «Logos»: logo de AJT editable (nombre de la ubicación).
 export const LOGO_TEMPLATES = [
   { id: 'logo_ajt', name: 'AJT · logo con ubicación', builtin: true, category: 'Logos', doc: () => buildAjtLogoDoc() },
+];
+
+// Degradado negro → transparente 9:16 (PNG para dar legibilidad a lo que se pone encima)
+export const GRADIENT_TEMPLATES = [
+  { id: 'gradient_legibility', name: 'Degradado de legibilidad', builtin: true, category: 'Fondos', doc: () => buildGradientDoc() },
 ];

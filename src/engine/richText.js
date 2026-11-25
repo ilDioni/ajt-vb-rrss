@@ -1,6 +1,11 @@
-// Texto enriquecido muy ligero (cuerpo, y títulos con marcas): solo soporta
-// negrita parcial marcando fragmentos con **así** (estilo Markdown), para
-// poder resaltar palabras sueltas sin tener que crear una capa de texto nueva.
+import { FONT_SET, brandColors, getWidthVariant, snapWeight } from './fontSets.js';
+
+// Texto enriquecido muy ligero, con marcas dentro del propio texto, para
+// resaltar palabras sueltas sin tener que crear una capa de texto nueva:
+//   **así**                  negrita
+//   [rojo]así[/rojo]         color de la marca (blanco, negro, rojo, crema)
+//   [thunder]así[/thunder]   letra (roman, bold, thunder, black, playground)
+// Se pueden combinar y anidar: [rojo][thunder]así[/thunder][/rojo].
 //
 // Konva.Text no soporta estilos mixtos dentro de un mismo nodo, así que
 // troceamos el texto en "runs" (segmentos con el mismo estilo) y calculamos
@@ -13,46 +18,99 @@ function getCtx() {
   return measureCanvas.getContext('2d');
 }
 
-// "hola **mundo** bonito" -> [{text:'hola ',bold:false}, {text:'mundo',bold:true}, {text:' bonito',bold:false}]
-export function parseBoldSegments(text) {
+// Marcas disponibles (las usan también los botones del panel)
+export const COLOR_MARKS = brandColors().map((c) => ({ tag: c.label.toLowerCase(), label: c.label, hex: c.hex }));
+export const FONT_MARKS = FONT_SET.styles.map((s) => ({ tag: s.tag, label: s.label, style: s }));
+const COLOR_BY_TAG = Object.fromEntries(COLOR_MARKS.map((m) => [m.tag, m.hex]));
+const STYLE_BY_TAG = Object.fromEntries(FONT_MARKS.map((m) => [m.tag, m.style]));
+
+const TOKEN = /\*\*|\[(\/?)([a-z]+)\]/gi;
+
+// "hola **mundo** [rojo]bonito[/rojo]" ->
+//   [{text:'hola ', bold:false, color:null, font:null}, {text:'mundo', bold:true, ...}, {text:' '}, {text:'bonito', color:'#ff002c'}]
+// Las ** van por parejas (una suelta se queda como texto); una marca de cierre
+// sin su apertura, o una etiqueta que no existe, también se quedan como texto.
+export function parseRich(text) {
+  const src = text || '';
+  const stars = [...src.matchAll(/\*\*/g)].map((m) => m.index);
+  const paired = new Set(stars.slice(0, stars.length - (stars.length % 2)));
   const segments = [];
-  const re = /\*\*(.+?)\*\*/g;
-  let last = 0;
-  let m;
-  while ((m = re.exec(text))) {
-    if (m.index > last) segments.push({ text: text.slice(last, m.index), bold: false });
-    segments.push({ text: m[1], bold: true });
-    last = re.lastIndex;
+  const colors = [];
+  const fonts = [];
+  let bold = false;
+  let pos = 0;
+  const push = (upTo) => {
+    if (upTo > pos) {
+      segments.push({ text: src.slice(pos, upTo), bold, color: COLOR_BY_TAG[colors[colors.length - 1]] || null, font: fonts[fonts.length - 1] || null });
+    }
+  };
+  for (const m of src.matchAll(TOKEN)) {
+    if (m.index < pos) continue;
+    let apply = null;
+    if (m[0] === '**') {
+      if (paired.has(m.index)) apply = () => { bold = !bold; };
+    } else {
+      const closing = m[1] === '/';
+      const name = m[2].toLowerCase();
+      const stack = name in COLOR_BY_TAG ? colors : name in STYLE_BY_TAG ? fonts : null;
+      if (stack && !closing) apply = () => stack.push(name);
+      else if (stack && stack.lastIndexOf(name) >= 0) apply = () => stack.splice(stack.lastIndexOf(name), 1);
+    }
+    if (!apply) continue;
+    push(m.index);
+    apply();
+    pos = m.index + m[0].length;
   }
-  if (last < text.length) segments.push({ text: text.slice(last), bold: false });
+  push(src.length);
   return segments;
+}
+
+// El texto sin las marcas
+export function stripMarkup(text) {
+  return parseRich(text).map((s) => s.text).join('');
+}
+
+// ¿Lleva alguna marca (negrita, color o letra)?
+export function hasMarkup(text) {
+  const segs = parseRich(text);
+  return segs.some((s) => s.bold || s.color || s.font) || segs.map((s) => s.text).join('') !== (text || '');
 }
 
 // Peso base (el que se elige con los botones de peso; 800 por defecto en los
 // títulos) y peso de la negrita parcial (**así**), siempre más grueso que la base.
 export function bodyWeights(d) {
   const normal = d.weight || (d.role === 'title' ? 800 : (d.bold ? 700 : 400));
-  const bold = Math.min(900, Math.max(700, normal + 300));
-  return { normal, bold };
+  return { normal, bold: boldWeightFor(normal) };
+}
+function boldWeightFor(normal) {
+  return Math.min(900, Math.max(700, normal + 300));
 }
 
-export function hasBoldMarkers(text) {
-  return /\*\*(.+?)\*\*/.test(text || '');
+// Letra de un trozo: la de la capa (base = { family, normal, bold }) o la de
+// su marca de letra ([thunder]…)
+function segmentFace(seg, base) {
+  const style = seg.font && STYLE_BY_TAG[seg.font];
+  if (!style) return base;
+  const normal = style.patch.weight;
+  return { family: getWidthVariant(style.patch.widthVariant).family, normal, bold: boldWeightFor(normal) };
 }
 
-// El texto sin las marcas de negrita
-export function stripBold(text) {
-  return (text || '').replace(/\*\*(.+?)\*\*/g, '$1');
+// Familias y pesos que hacen falta para dibujar un texto (para cargarlas antes)
+export function richFaces(text, base) {
+  return parseRich(text).map((seg) => {
+    const face = segmentFace(seg, base);
+    return { family: face.family, weight: seg.bold ? face.bold : face.normal };
+  });
 }
 
 // Trocea los segmentos en "palabras", espacios y saltos de línea ("\n" va
 // como token propio para respetar los puntos y aparte y las líneas vacías),
-// preservando el flag bold.
+// preservando el estilo de cada trozo.
 function segmentsToWords(segments) {
   const words = [];
   for (const seg of segments) {
     const parts = seg.text.replace(/\r\n?/g, '\n').split(/(\n|[^\S\n]+)/).filter((p) => p.length);
-    for (const part of parts) words.push({ text: part, bold: seg.bold });
+    for (const part of parts) words.push({ ...seg, text: part });
   }
   return words;
 }
@@ -62,21 +120,50 @@ function fontString(weight, size, family, italic = false) {
 }
 
 /**
- * Calcula las líneas (wrap) para un fontSize dado. Devuelve también el alto total usado.
+ * Calcula las líneas (wrap) para un fontSize dado. Devuelve también el alto
+ * total usado. Cada run trae su familia, peso, color (null = el de la capa),
+ * si su negrita es simulada (familias sin un corte más grueso) y dy, el ajuste
+ * vertical para que letras distintas compartan la línea base.
  */
 export function layoutRichText({
   text, box, fontFamily, fontFamilyItalic, italic, normalWeight = 400, boldWeight = 700,
   fontSize, lineHeight = 1.08, align = 'left', letterSpacing = 0,
 }) {
   const ctx = getCtx();
-  const family = italic ? fontFamilyItalic : fontFamily;
-  const words = segmentsToWords(parseBoldSegments(text));
+  const base = { family: italic ? fontFamilyItalic : fontFamily, normal: normalWeight, bold: boldWeight };
+  const words = segmentsToWords(parseRich(text)).map((w) => {
+    const face = segmentFace(w, base);
+    return {
+      ...w,
+      family: face.family,
+      weight: w.bold ? face.bold : face.normal,
+      fauxBold: w.bold && snapWeight(face.family, face.bold) <= snapWeight(face.family, face.normal),
+    };
+  });
+
+  // distancia de la línea media (donde Konva apoya el texto) a la línea base,
+  // por letra: con ella se alinean por la base letras distintas en una línea
+  const midToBase = new Map();
+  const baselineOf = (family, weight) => {
+    const key = `${family}|${weight}`;
+    if (!midToBase.has(key)) {
+      ctx.font = fontString(weight, fontSize, family, italic);
+      ctx.textBaseline = 'alphabetic';
+      const fromBase = ctx.measureText('H').fontBoundingBoxAscent;
+      ctx.textBaseline = 'middle';
+      const fromMiddle = ctx.measureText('H').fontBoundingBoxAscent;
+      ctx.textBaseline = 'alphabetic';
+      midToBase.set(key, fromBase != null && fromMiddle != null ? fromBase - fromMiddle : 0);
+    }
+    return midToBase.get(key);
+  };
+  const baseBaseline = baselineOf(base.family, base.normal);
 
   const lines = [];
   let current = [];
 
   const isSpaceText = (t) => /^\s+$/.test(t);
-  const lineWidth = (words) => words.reduce((acc, w) => acc + w.width, 0);
+  const lineWidth = (ws) => ws.reduce((acc, w) => acc + w.width, 0);
   // endsParagraph: la línea termina en un Enter o es la última (no se justifica)
   const pushLine = (endsParagraph) => {
     while (current.length && isSpaceText(current[current.length - 1].text)) current.pop();
@@ -84,9 +171,9 @@ export function layoutRichText({
     current = [];
   };
   // Konva añade el espaciado entre letras detrás de cada carácter
-  const measure = (text, bold) => {
-    ctx.font = fontString(bold ? boldWeight : normalWeight, fontSize, family, italic);
-    return ctx.measureText(text).width + letterSpacing * [...text].length;
+  const measure = (t, w) => {
+    ctx.font = fontString(w.weight, fontSize, w.family, italic);
+    return ctx.measureText(t).width + letterSpacing * [...t].length;
   };
 
   // Una palabra más ancha que la caja (p.ej. escribir sin espacios) se parte
@@ -95,7 +182,7 @@ export function layoutRichText({
     const pieces = [];
     let piece = '';
     for (const ch of word.text) {
-      if (piece && measure(piece + ch, word.bold) > box.width) {
+      if (piece && measure(piece + ch, word) > box.width) {
         pieces.push(piece);
         piece = ch;
       } else {
@@ -103,7 +190,7 @@ export function layoutRichText({
       }
     }
     if (piece) pieces.push(piece);
-    return pieces.map((t) => ({ text: t, bold: word.bold, width: measure(t, word.bold) }));
+    return pieces.map((t) => ({ ...word, text: t, width: measure(t, word) }));
   };
 
   for (const word of words) {
@@ -113,7 +200,7 @@ export function layoutRichText({
       pushLine(true);
       continue;
     }
-    const w = measure(word.text, word.bold);
+    const w = measure(word.text, word);
     if (isSpaceText(word.text)) {
       // no arrancamos línea con un espacio
       if (current.length === 0) continue;
@@ -144,7 +231,8 @@ export function layoutRichText({
       if (spaces) extraPerSpace = (box.width - line.width) / spaces;
     }
     for (const w of line.words) {
-      positioned.push({ ...w, x, y, family });
+      const dy = w.family === base.family && w.weight === base.normal ? 0 : baseBaseline - baselineOf(w.family, w.weight);
+      positioned.push({ ...w, x, y, dy });
       x += w.width + (isSpaceText(w.text) ? extraPerSpace : 0);
     }
     y += fontSize * lineHeight;
@@ -155,8 +243,8 @@ export function layoutRichText({
 }
 
 /**
- * Igual que fitTextToBox pero para texto con negrita parcial: prueba tamaños
- * de mayor a menor hasta que el layout completo quepa en box.height.
+ * Igual que fitTextToBox pero para texto con marcas: prueba tamaños de mayor
+ * a menor hasta que el layout completo quepa en box.height.
  */
 export function fitRichText({
   text, box, fontFamily, fontFamilyItalic, italic, normalWeight = 400, boldWeight = 700,

@@ -5,6 +5,9 @@ import { FONT_SET, brandColors } from '../engine/fontSets.js';
 import { recolorThumb } from '../lib/recolor.js';
 import { swatches } from './swatches.js';
 import { icon } from './icons.js';
+import { shadowGroup } from './shadowControls.js';
+import { COLOR_MARKS, FONT_MARKS } from '../engine/richText.js';
+import { shadowTargets } from '../engine/shadow.js';
 import { AJT_LOGO_VARIANTS, AJT_LOGO_LAYOUTS, ajtColor } from '../templates/ajtLogo.js';
 import { VILLALBA_LOGO_VARIANTS, villalbaSrc, villalbaOptions, villalbaVariant, backgroundColor } from '../templates/villalbaLogo.js';
 import { LOGO_KINDS, logoKindOf, logoSrcFor, PIN_VARIANTS } from '../engine/stageRenderer.js';
@@ -140,6 +143,8 @@ export function renderQuickPanel(container, { onChange } = {}) {
   }
 
   container.appendChild(g);
+  const targets = shadowTargets(state);
+  if (targets.length) container.appendChild(shadowGroup(targets.map((l) => l.id), { onChange: () => onChange && onChange(), rerender: () => renderQuickPanel(container, { onChange }) }));
 }
 
 // Activa/desactiva el subtítulo del artículo. Desactivado: no se ve ni se
@@ -159,7 +164,7 @@ function setArticleSubtitle(enabled) {
 // Panel de una galería de stickers ya hechos: miniaturas para elegir cuál se
 // ve en el lienzo, color de marca (en los stickers de un solo color) y botones
 // para descargar (uno o todos).
-export function renderGalleryPanel(container, { gallery, currentKey, color, onSelect, onColor, onDownload, onDownloadAll }) {
+export function renderGalleryPanel(container, { gallery, currentKey, color, onSelect, onColor, onDownload, onDownloadAll, shadowIds, onShadow, rerender }) {
   container.innerHTML = '';
   const current = gallery.items.find((i) => i.key === currentKey) || gallery.items[0];
   const canRecolor = gallery.items.some((i) => i.recolor);
@@ -219,11 +224,13 @@ export function renderGalleryPanel(container, { gallery, currentKey, color, onSe
     g.appendChild(all);
   }
   container.appendChild(g);
+  // el fondo vertical (opaco) se descarga tal cual: sin margen ni sombra
+  if (shadowIds && shadowIds.length && !current.noPad) container.appendChild(shadowGroup(shadowIds, { onChange: onShadow, rerender }));
 }
 
 // Panel del logo editable de AJT: nombre de la ubicación, composición y
 // combinación de colores permitida según el fondo.
-export function renderAjtLogoPanel(container, { logo, onChange, onDownload, onDownloadSquare }) {
+export function renderAjtLogoPanel(container, { logo, onChange, onDownload, onDownloadSquare, shadowIds, onShadow, rerender }) {
   container.innerHTML = '';
   const g = document.createElement('div');
   g.className = 'prop-group';
@@ -250,7 +257,7 @@ export function renderAjtLogoPanel(container, { logo, onChange, onDownload, onDo
         e.preventDefault();
         if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
         onChange({ [key]: o.key });
-        renderAjtLogoPanel(container, { logo: { ...logo, [key]: o.key }, onChange, onDownload, onDownloadSquare });
+        renderAjtLogoPanel(container, { logo: { ...logo, [key]: o.key }, onChange, onDownload, onDownloadSquare, shadowIds, onShadow, rerender });
       });
       wrap.appendChild(b);
     });
@@ -284,6 +291,7 @@ export function renderAjtLogoPanel(container, { logo, onChange, onDownload, onDo
   sq.addEventListener('click', onDownloadSquare);
   g.appendChild(sq);
   container.appendChild(g);
+  if (shadowIds && shadowIds.length) container.appendChild(shadowGroup(shadowIds, { onChange: onShadow, rerender }));
 }
 
 export function renderProps(container, layerId, { onChange, onRemove } = {}) {
@@ -473,7 +481,7 @@ export function renderProps(container, layerId, { onChange, onRemove } = {}) {
     if (isBodySticker || isTitleSticker || isGeneralEditor) {
       const boldHint = document.createElement('p');
       boldHint.className = 'hint';
-      boldHint.textContent = 'Truco: selecciona una parte del texto de arriba y pulsa "Negrita (selección)" para resaltar solo esas palabras.';
+      boldHint.textContent = 'Truco: selecciona una parte del texto de arriba y pulsa «Negrita», un color o una letra para cambiar solo esas palabras. En el texto verás marcas como **así** o [rojo]así[/rojo]: no las borres a medias.';
       g.appendChild(boldHint);
       const selBoldRow = document.createElement('div');
       selBoldRow.className = 'toggle-row';
@@ -498,6 +506,64 @@ export function renderProps(container, layerId, { onChange, onRemove } = {}) {
       });
       selBoldRow.appendChild(selBoldBtn);
       g.appendChild(selBoldRow);
+
+      // envuelve lo seleccionado con [marca]…[/marca] (o la quita si ya la tiene)
+      const wrapSelection = (tag) => {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        if (start === end) return; // nada seleccionado
+        const value = textarea.value;
+        const before = value.slice(0, start);
+        const selected = value.slice(start, end);
+        const after = value.slice(end);
+        const open = `[${tag}]`;
+        const close = `[/${tag}]`;
+        const wrapped = before.toLowerCase().endsWith(open) && after.toLowerCase().startsWith(close);
+        const newValue = wrapped
+          ? before.slice(0, -open.length) + selected + after.slice(close.length)
+          : `${before}${open}${selected}${close}${after}`;
+        textarea.value = newValue;
+        patch({ text: newValue });
+        textarea.focus();
+        const at = wrapped ? start - open.length : start + open.length;
+        textarea.setSelectionRange(at, at + selected.length);
+      };
+      const markRow = (label, marks) => {
+        const r = document.createElement('div');
+        r.className = 'toggle-row wrap';
+        marks.forEach((m) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = m.label;
+          b.addEventListener('click', () => wrapSelection(m.tag));
+          r.appendChild(b);
+        });
+        g.appendChild(row(label, r));
+      };
+      markRow('Color de la selección', COLOR_MARKS);
+      markRow('Letra de la selección', FONT_MARKS);
+
+      const clearRow = document.createElement('div');
+      clearRow.className = 'toggle-row';
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.textContent = 'Quitar formato (selección)';
+      clearBtn.addEventListener('click', () => {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        if (start === end) return;
+        const tags = [...COLOR_MARKS, ...FONT_MARKS].map((m) => m.tag).join('|');
+        const marks = new RegExp(`\\*\\*|\\[\\/?(?:${tags})\\]`, 'gi');
+        const value = textarea.value;
+        const cleaned = value.slice(start, end).replace(marks, '');
+        const newValue = value.slice(0, start) + cleaned + value.slice(end);
+        textarea.value = newValue;
+        patch({ text: newValue });
+        textarea.focus();
+        textarea.setSelectionRange(start, start + cleaned.length);
+      });
+      clearRow.appendChild(clearBtn);
+      g.appendChild(clearRow);
     }
 
     // el editor general (stories, artículo...) sigue teniendo el selector de
@@ -939,6 +1005,15 @@ export function renderProps(container, layerId, { onChange, onRemove } = {}) {
   // primero que se quiere tocar al diseñar. En el sticker de título no
   // aplican (lienzo fijo al contenido, una sola capa): se omiten del todo.
   // título y cuerpo de sticker: lienzo ajustado al contenido, sin posición
+  // sombra difusa opcional (textos, logos y, en los stickers rápidos, el sticker entero)
+  const shTargets = shadowTargets(getState(), layerId);
+  if (shTargets.length) {
+    container.appendChild(shadowGroup(shTargets.map((l) => l.id), {
+      onChange: () => onChange && onChange(),
+      rerender: () => renderProps(container, layerId, { onChange, onRemove }),
+    }));
+  }
+
   // capas obligatorias (logo de Villalba): sin mover, sin quitar del PNG y sin borrar
   if (topQuickMode !== 'title' && topQuickMode !== 'body' && !layer.required) {
     container.appendChild(buildTransformGroup());

@@ -1,6 +1,6 @@
 # Stories AJT
 
-Generador interno de stories y stickers de Instagram con la identidad de marca de AJT (Asamblea de la Juventud Trabajadora): plantillas de repost, artículo (general y Diario Socialista) e imágenes, textos (título y cuerpo), stickers de ubicación y de fechas, logo editable y stickers temáticos. Los textos, las fechas y las ubicaciones pueden llevar una pastilla de fondo (sin fondo, blanco, negro, rojo o crema) con las esquinas más o menos redondeadas, y en todos los textos lo que va entre dobles asteriscos (`**así**`) sale en negrita. Funciona en el navegador, también en el móvil, y se puede instalar como app ("Añadir a pantalla de inicio").
+Generador interno de stories y stickers de Instagram con la identidad de marca de AJT (Asamblea de la Juventud Trabajadora): plantillas de repost, artículo (general y Diario Socialista) e imágenes, textos (título y cuerpo), stickers de ubicación y de fechas, logo editable y stickers temáticos. Los textos, las fechas y las ubicaciones pueden llevar una pastilla de fondo (sin fondo, blanco, negro, rojo o crema) con las esquinas más o menos redondeadas, y sombra difusa opcional. Dentro de un mismo texto o título cada trozo puede llevar su negrita, su color y su letra: se selecciona el trozo y se pulsa el botón (en el texto quedan marcas como `**así**`, `[rojo]así[/rojo]` o `[thunder]así[/thunder]`). En «Fondos» hay un generador de degradados 9:16 para dar legibilidad. Funciona en el navegador, también en el móvil, y se puede instalar como app ("Añadir a pantalla de inicio").
 
 ## Probar en local
 

@@ -7,6 +7,10 @@ Trabajadora) sin Photoshop. Solo AJT: CJS y OES se quitaron a propósito (2026-1
 Repo ilDioni/ajt-vb-rrss, rama main; si GitHub Pages está activado se sirve en
 https://ildioni.github.io/ajt-vb-rrss/. Actualizar = commit + `git push` **solo cuando el usuario lo pida**.
 
+- Repo original (multimarca): CJSocialista00/stories-rrss, remoto `upstream`. Sus novedades se traen a mano,
+  adaptándolas (NO merge: allí siguen CJS, OES y Comunidad). Último commit revisado: `7a4dda0` (2026-11-24;
+  traídos sombra, degradados/«Fondos» y margen de stickers; lo de Comunidad no). Para ver lo nuevo:
+  `git fetch upstream && git log --oneline 7a4dda0..upstream/main`.
 - Probar en local: `python devserver.py` (puerto 5500, también desde el móvil por la IP de la red).
 - Archivos clave: `src/main.js`, `src/engine/stageRenderer.js`, `src/engine/fontSets.js` (tipografías y
   paleta de AJT), `src/templates/` (plantillas, ubicación, logo AJT), `src/ui/` (interfaz).
@@ -33,9 +37,14 @@ https://ildioni.github.io/ajt-vb-rrss/. Actualizar = commit + `git push` **solo 
   es el de título con `keepCase` (respeta minúsculas).
 - Logo editable de AJT: «Sin fondo» por defecto (PNG transparente) o «Pastilla» del color de fondo de la
   combinación elegida (`ajtPill`, `ajtRound` en `ajtLogo.js`).
-- Negrita con `**así**` también en títulos (stickers de título/fecha, ubicación y títulos de plantillas):
-  esos textos se dibujan por "runs" como el cuerpo. Si la familia no tiene un corte más grueso (Thunder,
-  Black Condensed, PP Playground o ya en Bold) la negrita se simula con un trazo fino del mismo color.
+- Marcas dentro del texto (`src/engine/richText.js`, `parseRich`): `**negrita**`, color `[rojo]…[/rojo]`
+  (blanco, negro, rojo, crema) y letra `[thunder]…[/thunder]` (roman, bold, thunder, black, playground; el
+  `tag` de cada corte en `fontSets.js`). Se combinan y anidan; sin distinguir mayúsculas (el título las pasa
+  a mayúsculas). Valen en textos, títulos, fechas, ubicación y títulos de plantillas: con marcas se dibujan
+  por "runs" (cada trozo con su familia, peso y color, alineados por la línea base). En el panel: botones
+  «Color de la selección», «Letra de la selección» y «Quitar formato (selección)». Si la familia no tiene
+  un corte más grueso (Thunder, Black Condensed, PP Playground o ya en Bold) la negrita se simula con un
+  trazo fino del mismo color.
 - Logo de la pantalla de inicio: AJT Villalba compacto, original blanco.
 - Foto de fondo del Diario Socialista: «Brillo» (campo `darken` de la capa = capa negra encima con
   opacidad); el control sale en las capas de imagen que traen `darken`.
@@ -44,5 +53,13 @@ https://ildioni.github.io/ajt-vb-rrss/. Actualizar = commit + `git push` **solo 
   eso hay umbral alto y plan B con métricas de texto. Síntoma si falla: ubicación/título con la letra 2,6
   veces más pequeña y desplazada hacia abajo.
 - La sección «Comunidad» (Supabase) se quitó a propósito (2026-11-17): la app ya no usa ningún backend.
+- Sombra difusa opcional (textos, logos y stickers): `src/engine/shadow.js` y `src/ui/shadowControls.js`. En los
+  stickers rápidos el lienzo crece para que no se corte (`applyShadowMargin` en `main.js`). La pastilla existe
+  siempre (oculta = sin fondo): la sombra se guarda en pastilla, texto y pin a la vez y se dibuja en la pastilla
+  si se ve, o en el texto/pin si no (`coveredByPill` en `stageRenderer.js`).
+- Pantalla «Fondos» → «Degradado de legibilidad» (negro → transparente, PNG 1080×1920): `src/engine/gradient.js`,
+  `src/templates/gradient.js`, `src/ui/gradientPanel.js`.
+- Todos los stickers se descargan con un 6 % de margen transparente y centrados en un cuadrado (`src/lib/pad.js`;
+  Instagram pintaba de blanco la transparencia en algunos móviles). El fondo vertical opaco lleva `noPad`.
 - Interfaz sencilla: paneles únicos, sin controles redundantes, sin emojis ni degradados («plana de taller»).
 - Si dice que va lento: comprobar primero que se reinició el servidor y se recargó la página.

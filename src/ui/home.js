@@ -5,8 +5,9 @@ import { isMuted, setMuted } from '../lib/sound.js';
 import { icon } from './icons.js';
 
 // Menú de inicio, de arriba abajo:
-//   1. Plantillas · Textos · Stickers
-//   2. Plantillas → Reposts · Artículos · Imágenes; Stickers → Ubicación · Fechas · Logo AJT · Temáticos
+//   1. Plantillas · Textos · Stickers · Fondos
+//   2. Plantillas → Reposts · Artículos · Imágenes; Stickers → Ubicación · Fechas · Logo AJT · Temáticos;
+//      Fondos → Degradado de legibilidad
 //   3. Temáticos → Huelga, etc.
 // Cada nivel es una lista con «‹ Volver»; la última fila abre la plantilla.
 
@@ -57,6 +58,12 @@ const MENU = [
           { title: 'Huelga General 11N', hint: '5 stickers y fondo vertical', icon: 'flag', id: 'sticker_huelga_huelga-general' },
         ],
       },
+    ],
+  },
+  {
+    title: 'Fondos', hint: 'Degradados para tus stories', icon: 'layers',
+    children: [
+      { title: 'Degradado de legibilidad', hint: 'Negro a transparente 9:16, para leer mejor lo que pones encima', icon: 'layers', id: 'gradient_legibility' },
     ],
   },
 ];
