@@ -118,6 +118,17 @@ export function renderComposePanel(container, { renderer, onChange, onRefresh, r
           onChange(); setView('main');
         },
       }));
+      if (k === 'location') {
+        edit.appendChild(el('p', 'cp-hint', 'Chincheta'));
+        edit.appendChild(swatches(selected.cmpPinColor || null, {
+          original: 'Como el texto',
+          onPick: async (hex) => {
+            const cur = getState().layers.find((l) => l.id === selected.id);
+            await editLocation(cur, { pinColor: hex });
+            onChange(); setView('main');
+          },
+        }));
+      }
     } else if (k === 'image' && selected.cmpRecolor) {
       edit.appendChild(swatches(selected.tint, { original: true, onPick: (hex) => { updateLayer(selected.id, { tint: hex }); onChange(); setView('main'); } }));
     } else if (k === 'ajtLogo') {

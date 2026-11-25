@@ -132,7 +132,9 @@ function regenerateQuickCore() {
     const off = pill && pill.visible !== false ? g.pillPad : 0;
     if (pill) updateLayer(pill.id, { padding: g.pillPad }, { history: false });
     setCanvasSize(g.canvasW + off * 2, g.canvasH + off * 2);
-    updateLayer(pin.id, { asset: pinAssetForColor(text.color), tint: text.color || '#ffffff', x: g.pinX + off, y: g.pinY + off, width: g.pinW, height: g.pinH }, { history: false });
+    // la chincheta, de su color propio o del del texto
+    const pinColor = pin.pinColor || text.color || '#ffffff';
+    updateLayer(pin.id, { asset: pinAssetForColor(pinColor), tint: pinColor, x: g.pinX + off, y: g.pinY + off, width: g.pinW, height: g.pinH }, { history: false });
     updateLayer(text.id, { text: g.cityName, x: g.textX + off, y: g.textY + off, width: g.textW, height: g.textH, fontSize: g.fontSize, letterSpacing: g.letterSpacing }, { history: false });
   } else if (mode === 'photoLocation') {
     const pin = state.layers.find((l) => l.type === 'pin');
@@ -143,7 +145,8 @@ function regenerateQuickCore() {
     const pill = state.layers.find((l) => l.type === 'pill');
     const g = computePhotoBadgeGeometry(text.text, { corner, canvasW: state.canvas.width, canvasH: state.canvas.height, scale, pill: !!pill && pill.visible !== false });
     if (pill) updateLayer(pill.id, { padding: g.pillPad }, { history: false });
-    updateLayer(pin.id, { asset: pinAssetForColor(text.color), tint: text.color || '#ffffff', corner, scale, x: g.pinX, y: g.pinY, width: g.pinW, height: g.pinH }, { history: false });
+    const pinColor = pin.pinColor || text.color || '#ffffff';
+    updateLayer(pin.id, { asset: pinAssetForColor(pinColor), tint: pinColor, corner, scale, x: g.pinX, y: g.pinY, width: g.pinW, height: g.pinH }, { history: false });
     updateLayer(text.id, { text: g.cityName, x: g.textX, y: g.textY, width: g.textW, height: g.textH, fontSize: g.fontSize, letterSpacing: g.letterSpacing }, { history: false });
   }
   return true;

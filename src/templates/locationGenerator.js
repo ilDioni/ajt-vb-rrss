@@ -258,8 +258,11 @@ export function computeLocationGeometry(cityNameRaw, { H = 600 } = {}) {
   const leftMargin = RATIO.leftMargin * H;
   const rightMargin = RATIO.rightMargin * H;
   const gap = RATIO.gap * H;
-  const topMargin = RATIO.topMargin * H;
-  const bottomMargin = RATIO.bottomMargin * H;
+  // con trozos en otra letra (más alta, o con rasgos largos como PP
+  // Playground) se deja más hueco arriba y abajo para que no se corten
+  const extra = parseRich(cityName).some((s) => s.font) ? H * 0.35 : 0;
+  const topMargin = RATIO.topMargin * H + extra;
+  const bottomMargin = RATIO.bottomMargin * H + extra;
   const pinWidth = RATIO.pinWidth * H;
   return {
     cityName,

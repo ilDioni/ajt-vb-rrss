@@ -64,6 +64,97 @@ function pillCornersRow(roundness, onValue) {
   return row('Esquinas', rangeWithNumber(0, 100, 1, Math.round((roundness ?? 0.35) * 100), (v) => onValue(v / 100)));
 }
 
+// Herramientas para dar formato a un trozo del texto: negrita, color y letra
+// de la selección (marcas **así**, [rojo]así[/rojo], [thunder]así[/thunder]) y
+// quitar formato. onText(nuevoTexto) guarda el texto.
+function appendSelectionTools(g, textarea, onText) {
+  const boldHint = document.createElement('p');
+  boldHint.className = 'hint';
+  boldHint.textContent = 'Truco: selecciona una parte del texto de arriba y pulsa «Negrita», un color o una letra para cambiar solo esas palabras. En el texto verás marcas como **así** o [rojo]así[/rojo]: no las borres a medias.';
+  g.appendChild(boldHint);
+  const selBoldRow = document.createElement('div');
+  selBoldRow.className = 'toggle-row';
+  const selBoldBtn = document.createElement('button');
+  selBoldBtn.textContent = 'Negrita (selección)';
+  selBoldBtn.addEventListener('click', () => {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    if (start === end) return; // nada seleccionado
+    const value = textarea.value;
+    const before = value.slice(0, start);
+    const selected = value.slice(start, end);
+    const after = value.slice(end);
+    // si ya está envuelto en ** **, lo quitamos (toggle); si no, lo añadimos
+    const alreadyWrapped = before.endsWith('**') && after.startsWith('**');
+    const newValue = alreadyWrapped
+      ? before.slice(0, -2) + selected + after.slice(2)
+      : `${before}**${selected}**${after}`;
+    textarea.value = newValue;
+    onText(newValue);
+    textarea.focus();
+  });
+  selBoldRow.appendChild(selBoldBtn);
+  g.appendChild(selBoldRow);
+
+  // envuelve lo seleccionado con [marca]…[/marca] (o la quita si ya la tiene)
+  const wrapSelection = (tag) => {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    if (start === end) return; // nada seleccionado
+    const value = textarea.value;
+    const before = value.slice(0, start);
+    const selected = value.slice(start, end);
+    const after = value.slice(end);
+    const open = `[${tag}]`;
+    const close = `[/${tag}]`;
+    const wrapped = before.toLowerCase().endsWith(open) && after.toLowerCase().startsWith(close);
+    const newValue = wrapped
+      ? before.slice(0, -open.length) + selected + after.slice(close.length)
+      : `${before}${open}${selected}${close}${after}`;
+    textarea.value = newValue;
+    onText(newValue);
+    textarea.focus();
+    const at = wrapped ? start - open.length : start + open.length;
+    textarea.setSelectionRange(at, at + selected.length);
+  };
+  const markRow = (label, marks) => {
+    const r = document.createElement('div');
+    r.className = 'toggle-row wrap';
+    marks.forEach((m) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = m.label;
+      b.addEventListener('click', () => wrapSelection(m.tag));
+      r.appendChild(b);
+    });
+    g.appendChild(row(label, r));
+  };
+  markRow('Color de la selección', COLOR_MARKS);
+  markRow('Letra de la selección', FONT_MARKS);
+
+  const clearRow = document.createElement('div');
+  clearRow.className = 'toggle-row';
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.textContent = 'Quitar formato (selección)';
+  clearBtn.addEventListener('click', () => {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    if (start === end) return;
+    const tags = [...COLOR_MARKS, ...FONT_MARKS].map((m) => m.tag).join('|');
+    const marks = new RegExp(`\\*\\*|\\[\\/?(?:${tags})\\]`, 'gi');
+    const value = textarea.value;
+    const cleaned = value.slice(start, end).replace(marks, '');
+    const newValue = value.slice(0, start) + cleaned + value.slice(end);
+    textarea.value = newValue;
+    onText(newValue);
+    textarea.focus();
+    textarea.setSelectionRange(start, start + cleaned.length);
+  });
+  clearRow.appendChild(clearBtn);
+  g.appendChild(clearRow);
+}
+
 // Panel único para los generadores rápidos (ubicación / foto+ubicación):
 // pin+texto (y foto) se tratan como un solo elemento, no como capas sueltas
 // que haya que ir seleccionando una a una.
@@ -98,6 +189,7 @@ export function renderQuickPanel(container, { onChange } = {}) {
   textarea.placeholder = 'Nombre de la ciudad / lugar';
   textarea.addEventListener('input', () => patchText({ text: textarea.value }));
   g.appendChild(row('Ubicación', textarea));
+  appendSelectionTools(g, textarea, (t) => patchText({ text: t }));
 
   // Solo colores corporativos (sin selector libre). Se reacciona en
   // pointerdown: en el móvil, si el teclado está abierto, el primer toque lo
@@ -106,6 +198,14 @@ export function renderQuickPanel(container, { onChange } = {}) {
     onPick: (hex) => { patchText({ color: hex }); renderQuickPanel(container, { onChange }); },
   });
   g.appendChild(row('Color', quickColors));
+
+  // color de la chincheta: el del texto o uno propio (solo colores de marca)
+  if (pin) {
+    g.appendChild(row('Chincheta', swatches(pin.pinColor || null, {
+      original: 'Como el texto',
+      onPick: (hex) => { updateLayer(pin.id, { pinColor: hex }); onChange && onChange(); renderQuickPanel(container, { onChange }); },
+    })));
+  }
 
   const pill = state.layers.find((l) => l.type === 'pill');
   if (pill) {
@@ -479,91 +579,7 @@ export function renderProps(container, layerId, { onChange, onRemove } = {}) {
     }
 
     if (isBodySticker || isTitleSticker || isGeneralEditor) {
-      const boldHint = document.createElement('p');
-      boldHint.className = 'hint';
-      boldHint.textContent = 'Truco: selecciona una parte del texto de arriba y pulsa «Negrita», un color o una letra para cambiar solo esas palabras. En el texto verás marcas como **así** o [rojo]así[/rojo]: no las borres a medias.';
-      g.appendChild(boldHint);
-      const selBoldRow = document.createElement('div');
-      selBoldRow.className = 'toggle-row';
-      const selBoldBtn = document.createElement('button');
-      selBoldBtn.textContent = 'Negrita (selección)';
-      selBoldBtn.addEventListener('click', () => {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        if (start === end) return; // nada seleccionado
-        const value = textarea.value;
-        const before = value.slice(0, start);
-        const selected = value.slice(start, end);
-        const after = value.slice(end);
-        // si ya está envuelto en ** **, lo quitamos (toggle); si no, lo añadimos
-        const alreadyWrapped = before.endsWith('**') && after.startsWith('**');
-        const newValue = alreadyWrapped
-          ? before.slice(0, -2) + selected + after.slice(2)
-          : `${before}**${selected}**${after}`;
-        textarea.value = newValue;
-        patch({ text: newValue });
-        textarea.focus();
-      });
-      selBoldRow.appendChild(selBoldBtn);
-      g.appendChild(selBoldRow);
-
-      // envuelve lo seleccionado con [marca]…[/marca] (o la quita si ya la tiene)
-      const wrapSelection = (tag) => {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        if (start === end) return; // nada seleccionado
-        const value = textarea.value;
-        const before = value.slice(0, start);
-        const selected = value.slice(start, end);
-        const after = value.slice(end);
-        const open = `[${tag}]`;
-        const close = `[/${tag}]`;
-        const wrapped = before.toLowerCase().endsWith(open) && after.toLowerCase().startsWith(close);
-        const newValue = wrapped
-          ? before.slice(0, -open.length) + selected + after.slice(close.length)
-          : `${before}${open}${selected}${close}${after}`;
-        textarea.value = newValue;
-        patch({ text: newValue });
-        textarea.focus();
-        const at = wrapped ? start - open.length : start + open.length;
-        textarea.setSelectionRange(at, at + selected.length);
-      };
-      const markRow = (label, marks) => {
-        const r = document.createElement('div');
-        r.className = 'toggle-row wrap';
-        marks.forEach((m) => {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.textContent = m.label;
-          b.addEventListener('click', () => wrapSelection(m.tag));
-          r.appendChild(b);
-        });
-        g.appendChild(row(label, r));
-      };
-      markRow('Color de la selección', COLOR_MARKS);
-      markRow('Letra de la selección', FONT_MARKS);
-
-      const clearRow = document.createElement('div');
-      clearRow.className = 'toggle-row';
-      const clearBtn = document.createElement('button');
-      clearBtn.type = 'button';
-      clearBtn.textContent = 'Quitar formato (selección)';
-      clearBtn.addEventListener('click', () => {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        if (start === end) return;
-        const tags = [...COLOR_MARKS, ...FONT_MARKS].map((m) => m.tag).join('|');
-        const marks = new RegExp(`\\*\\*|\\[\\/?(?:${tags})\\]`, 'gi');
-        const value = textarea.value;
-        const cleaned = value.slice(start, end).replace(marks, '');
-        const newValue = value.slice(0, start) + cleaned + value.slice(end);
-        textarea.value = newValue;
-        patch({ text: newValue });
-        textarea.focus();
-        textarea.setSelectionRange(start, start + cleaned.length);
-      });
-      clearRow.appendChild(clearBtn);
-      g.appendChild(clearRow);
+      appendSelectionTools(g, textarea, (text) => patch({ text }));
     }
 
     // el editor general (stories, artículo...) sigue teniendo el selector de

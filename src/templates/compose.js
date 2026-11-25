@@ -100,7 +100,8 @@ export function editBody(layer, patch) {
 }
 
 // ---- ubicación (se dibuja a un PNG; mismo pin y tipografía que el sticker de ubicación) ----
-export async function renderLocationPNG(city, color) {
+// pinColor: color de la chincheta (por defecto, el del texto)
+export async function renderLocationPNG(city, color, pinColor = color) {
   const Konva = window.Konva;
   const family = titleFamily();
   await ensureFonts([`italic 800 100px "${family}"`]);
@@ -111,7 +112,7 @@ export async function renderLocationPNG(city, color) {
   if (pin) {
     tint.width = pin.naturalWidth; tint.height = pin.naturalHeight;
     const tc = tint.getContext('2d');
-    tc.drawImage(pin, 0, 0); tc.globalCompositeOperation = 'source-in'; tc.fillStyle = color; tc.fillRect(0, 0, tint.width, tint.height);
+    tc.drawImage(pin, 0, 0); tc.globalCompositeOperation = 'source-in'; tc.fillStyle = pinColor || color; tc.fillRect(0, 0, tint.width, tint.height);
   }
   const stage = new Konva.Stage({ container: document.createElement('div'), width: g.canvasW, height: g.canvasH, listening: false });
   const layer = new Konva.Layer({ listening: false });
@@ -134,7 +135,7 @@ export async function addLocationSticker(city = 'VILLALBA') {
   const pos = centered(w, h);
   const layer = {
     ...makeImageLayer({ name: 'Ubicación', src: r.src, fit: 'contain', locked: false, x: pos.x, y: pos.y, width: w, height: h }),
-    cmpKind: 'location', cmpText: r.city, cmpColor: color, ...SHADOW_DEFAULTS,
+    cmpKind: 'location', cmpText: r.city, cmpColor: color, cmpPinColor: null, ...SHADOW_DEFAULTS,
   };
   addLayer(layer);
   return layer;
@@ -142,8 +143,10 @@ export async function addLocationSticker(city = 'VILLALBA') {
 export async function editLocation(layer, patch) {
   const city = patch.text !== undefined ? patch.text : layer.cmpText;
   const color = patch.color || layer.cmpColor;
-  const r = await renderLocationPNG(city, color);
-  updateLayer(layer.id, { src: r.src, height: layer.width * r.height / r.width, cmpText: r.city, cmpColor: color });
+  // null = la chincheta del color del texto
+  const pinColor = patch.pinColor !== undefined ? patch.pinColor : layer.cmpPinColor || null;
+  const r = await renderLocationPNG(city, color, pinColor);
+  updateLayer(layer.id, { src: r.src, height: layer.width * r.height / r.width, cmpText: r.city, cmpColor: color, cmpPinColor: pinColor });
 }
 
 // ---- imágenes ya hechas (stickers temáticos) ----

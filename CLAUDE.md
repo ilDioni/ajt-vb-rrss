@@ -15,7 +15,8 @@ https://ildioni.github.io/ajt-vb-rrss/. Actualizar = commit + `git push` **solo 
 - Archivos clave: `src/main.js`, `src/engine/stageRenderer.js`, `src/engine/fontSets.js` (tipografías y
   paleta de AJT), `src/templates/` (plantillas, ubicación, logo AJT), `src/ui/` (interfaz).
 - Colores (manual de AJT): rojo #ff002c, crema #f3f3e8, negro #000000, blanco #ffffff.
-- En los stickers de ubicación NO hay color libre: solo los colores de AJT.
+- En los stickers de ubicación NO hay color libre: solo los colores de AJT. La chincheta puede ir del color del
+  texto (por defecto) o de uno propio (`pinColor` en la capa del pin; `cmpPinColor` en «Imagen + stickers»).
 - Ubicación por defecto en stickers, foto y logo editable: Villalba.
 - Plantilla Artículo: logo de Villalba (`assets/logos/villalba`, `src/templates/villalbaLogo.js`) siempre
   abajo y centrado, fijo (sin mover, borrar, ocultar ni quitar del PNG). Versión alargada según el fondo:
@@ -41,8 +42,9 @@ https://ildioni.github.io/ajt-vb-rrss/. Actualizar = commit + `git push` **solo 
   (blanco, negro, rojo, crema) y letra `[thunder]…[/thunder]` (roman, bold, thunder, black, playground; el
   `tag` de cada corte en `fontSets.js`). Se combinan y anidan; sin distinguir mayúsculas (el título las pasa
   a mayúsculas). Valen en textos, títulos, fechas, ubicación y títulos de plantillas: con marcas se dibujan
-  por "runs" (cada trozo con su familia, peso y color, alineados por la línea base). En el panel: botones
-  «Color de la selección», «Letra de la selección» y «Quitar formato (selección)». Si la familia no tiene
+  por "runs" (cada trozo con su familia, peso y color, alineados por la línea base). En el panel (textos y
+  también ubicación/foto con ubicación, `appendSelectionTools` en `propsPanel.js`): botones «Color de la
+  selección», «Letra de la selección» y «Quitar formato (selección)». Si la familia no tiene
   un corte más grueso (Thunder, Black Condensed, PP Playground o ya en Bold) la negrita se simula con un
   trazo fino del mismo color.
 - Logo de la pantalla de inicio: AJT Villalba compacto, original blanco.

@@ -4,12 +4,13 @@ import { brandColors } from '../engine/fontSets.js';
 // el equipo solo usa colores corporativos). Reacciona en pointerdown: en el
 // móvil, con el teclado abierto, el primer toque lo cierra y el «click» se
 // perdía fuera del botón.
+// original: opción sin color de marca (true = «Original», o el texto que se pase)
 export function swatches(current, { original = false, onPick }) {
   const row = document.createElement('div');
   row.className = 'cp-swatches';
   row.setAttribute('role', 'group');
   row.setAttribute('aria-label', 'Color');
-  const options = [...(original ? [{ label: 'Original', hex: null }] : []), ...brandColors()];
+  const options = [...(original ? [{ label: typeof original === 'string' ? original : 'Original', hex: null }] : []), ...brandColors()];
   const cur = current ? current.toLowerCase() : null;
   options.forEach((c) => {
     const active = cur === (c.hex ? c.hex.toLowerCase() : null);
